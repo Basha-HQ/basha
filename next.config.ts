@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Allow large audio file uploads (200MB)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '200mb',
+    },
+  },
 };
 
 export default nextConfig;
