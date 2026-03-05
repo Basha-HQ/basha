@@ -1,5 +1,8 @@
-import { auth } from '@/lib/auth/config';
+import NextAuth from 'next-auth';
+import { authEdgeConfig } from '@/lib/auth/edge-config';
 import { NextResponse } from 'next/server';
+
+const { auth } = NextAuth(authEdgeConfig);
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
