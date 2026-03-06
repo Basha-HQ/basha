@@ -6,17 +6,11 @@
 
 const SARVAM_BASE_URL = 'https://api.sarvam.ai';
 
-export interface TranscriptSegment {
-  transcript: string;
-  start: number; // seconds
-  end: number;
-  language_code?: string;
-}
-
 export interface SarvamSTTResponse {
   transcript: string;
-  segments?: TranscriptSegment[];
   language_code: string;
+  language_probability?: number;
+  // segments is not returned by saaras:v3 — use splitIntoSegments() as fallback
 }
 
 export interface SarvamTranslationResponse {
@@ -38,9 +32,8 @@ export async function transcribeAudio(
   const formData = new FormData();
   const blob = new Blob([audioBuffer.buffer as ArrayBuffer], { type: 'audio/wav' });
   formData.append('file', blob, fileName);
-  formData.append('model', 'saarika:v2');
-  formData.append('language_code', 'unknown'); // auto-detect
-  formData.append('with_timestamps', 'true');
+  formData.append('model', 'saaras:v3');
+  formData.append('mode', 'transcribe'); // transcribe in original language; we translate separately
 
   const response = await fetch(`${SARVAM_BASE_URL}/speech-to-text`, {
     method: 'POST',
@@ -106,8 +99,7 @@ export async function translateToEnglish(
 
 /**
  * Split a full transcript into segments for processing.
- * In the real pipeline, Sarvam returns timestamps.
- * This is a fallback for when segments aren't available.
+ * saaras:v3 returns a single transcript string; this splits it by sentence.
  */
 export function splitIntoSegments(
   transcript: string,

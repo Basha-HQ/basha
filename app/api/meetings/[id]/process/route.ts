@@ -54,13 +54,8 @@ export async function POST(
     // Step 2: Transcribe with Sarvam AI
     const sttResult = await transcribeAudio(audioBuffer, fileName);
 
-    // Step 3: Split into segments
-    const segments = sttResult.segments?.length
-      ? sttResult.segments.map((s) => ({
-          text: s.transcript,
-          startSeconds: Math.round(s.start),
-        }))
-      : splitIntoSegments(sttResult.transcript, 0);
+    // Step 3: Split into segments (saaras:v3 returns a single transcript string)
+    const segments = splitIntoSegments(sttResult.transcript, 0);
 
     // Step 4: Translate each segment + store
     const englishSegments: string[] = [];

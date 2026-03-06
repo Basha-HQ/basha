@@ -191,12 +191,7 @@ async function handleRecordingReady(
     const fileName = path.basename(audioPath);
     const sttResult = await transcribeAudio(audioBuffer, fileName);
 
-    const segments = sttResult.segments?.length
-      ? sttResult.segments.map(s => ({
-          text: s.transcript,
-          startSeconds: Math.round(s.start),
-        }))
-      : splitIntoSegments(sttResult.transcript, 0);
+    const segments = splitIntoSegments(sttResult.transcript, 0);
 
     // 5. Translate each segment
     const englishSegments: string[] = [];
