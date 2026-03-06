@@ -20,9 +20,9 @@ export interface Bot {
   id: string;
   meeting_id: string;
   meeting_url: string;
+  recall_bot_id?: string;
   status: BotStatus;
   error?: string;
-  pid?: number;
   created_at: string;
   updated_at: string;
 }
