@@ -5,18 +5,56 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
+import { BotStatusCard } from './BotStatusCard';
 
-type Step = 'form' | 'uploading' | 'processing';
+type Mode = 'form' | 'uploading' | 'processing' | 'bot';
 
 export function NewMeetingForm() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('form');
+  const [mode, setMode] = useState<Mode>('form');
   const [meetingLink, setMeetingLink] = useState('');
   const [title, setTitle] = useState('');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
 
+  // Bot mode state
+  const [botId, setBotId] = useState('');
+  const [botMeetingId, setBotMeetingId] = useState('');
+
+  // ── Launch bot ──────────────────────────────────────────────────────────────
+  async function handleLaunchBot() {
+    setError('');
+    if (!meetingLink) {
+      setError('Please enter a meeting link to launch the bot');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/bots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetingUrl: meetingLink,
+          title: title || 'Bot Meeting',
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? 'Failed to launch bot');
+      }
+
+      const data = await res.json();
+      setBotId(data.botId);
+      setBotMeetingId(data.meetingId);
+      setMode('bot');
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  // ── Manual audio upload ─────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -26,10 +64,9 @@ export function NewMeetingForm() {
       return;
     }
 
-    setStep('uploading');
+    setMode('uploading');
 
     try {
-      // Step 1: Create meeting record
       setProgress('Creating meeting...');
       const createRes = await fetch('/api/meetings', {
         method: 'POST',
@@ -43,7 +80,6 @@ export function NewMeetingForm() {
       if (!createRes.ok) throw new Error('Failed to create meeting');
       const { meeting } = await createRes.json();
 
-      // Step 2: Upload audio
       setProgress('Uploading audio...');
       const formData = new FormData();
       formData.append('audio', audioFile);
@@ -58,9 +94,8 @@ export function NewMeetingForm() {
         throw new Error(err.error ?? 'Audio upload failed');
       }
 
-      // Step 3: Trigger AI processing
-      setStep('processing');
-      setProgress('Transcribing and translating... This may take a few minutes.');
+      setMode('processing');
+      setProgress('Transcribing and translating… This may take a few minutes.');
 
       const processRes = await fetch(`/api/meetings/${meeting.id}/process`, {
         method: 'POST',
@@ -71,15 +106,19 @@ export function NewMeetingForm() {
         throw new Error(err.error ?? 'Processing failed');
       }
 
-      // Redirect to meeting details
       router.push(`/meetings/${meeting.id}`);
     } catch (err) {
       setError(String(err));
-      setStep('form');
+      setMode('form');
     }
   }
 
-  if (step === 'processing') {
+  // ── Bot status view ─────────────────────────────────────────────────────────
+  if (mode === 'bot') {
+    return <BotStatusCard botId={botId} meetingId={botMeetingId} />;
+  }
+
+  if (mode === 'processing') {
     return (
       <Card>
         <CardBody className="py-12 text-center">
@@ -96,7 +135,7 @@ export function NewMeetingForm() {
     );
   }
 
-  if (step === 'uploading') {
+  if (mode === 'uploading') {
     return (
       <Card>
         <CardBody className="py-12 text-center">
@@ -108,6 +147,7 @@ export function NewMeetingForm() {
     );
   }
 
+  // ── Form ────────────────────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit}>
       <Card>
@@ -124,23 +164,63 @@ export function NewMeetingForm() {
             placeholder="e.g. Q2 Planning - Marketing Team"
           />
 
-          <Input
-            label="Meeting link (optional)"
-            id="meetingLink"
-            type="url"
-            value={meetingLink}
-            onChange={(e) => setMeetingLink(e.target.value)}
-            placeholder="https://meet.google.com/abc-defg-hij"
-          />
+          {/* Meeting link + bot launcher */}
+          <div className="space-y-2">
+            <Input
+              label="Meeting link"
+              id="meetingLink"
+              type="url"
+              value={meetingLink}
+              onChange={(e) => setMeetingLink(e.target.value)}
+              placeholder="https://meet.google.com/abc-defg-hij"
+            />
+
+            {meetingLink && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🤖</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-indigo-900">
+                      Launch bot to join this meeting
+                    </p>
+                    <p className="text-xs text-indigo-600 mt-0.5">
+                      A Chrome browser will open, join the call, record audio, and
+                      automatically process the transcript when the meeting ends.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleLaunchBot}
+                      className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      🚀 Launch bot
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white px-3 text-gray-400">or upload audio manually</span>
+            </div>
+          </div>
 
           {/* Audio upload */}
           <div className="space-y-1">
             <label className="text-sm font-medium text-gray-700">
-              Audio file <span className="text-red-500">*</span>
+              Audio file{' '}
+              <span className="text-gray-400 font-normal">(optional if using bot)</span>
             </label>
             <div
               className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                audioFile ? 'border-indigo-300 bg-indigo-50' : 'border-gray-300 hover:border-indigo-300'
+                audioFile
+                  ? 'border-indigo-300 bg-indigo-50'
+                  : 'border-gray-300 hover:border-indigo-300'
               }`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -188,8 +268,8 @@ export function NewMeetingForm() {
           )}
 
           <div className="pt-2">
-            <Button type="submit" size="lg" className="w-full">
-              Process Meeting
+            <Button type="submit" size="lg" className="w-full" disabled={!audioFile}>
+              Process uploaded audio
             </Button>
             <p className="text-center text-xs text-gray-400 mt-3">
               Audio will be transcribed and translated using Sarvam AI

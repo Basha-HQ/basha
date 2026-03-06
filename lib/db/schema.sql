@@ -91,3 +91,20 @@ CREATE INDEX IF NOT EXISTS idx_flags_transcript_id ON flags(transcript_id);
 -- Full-text search index on transcripts
 CREATE INDEX IF NOT EXISTS idx_transcripts_fts ON transcripts
   USING GIN(to_tsvector('english', COALESCE(original_text, '') || ' ' || COALESCE(english_text, '')));
+
+-- Bots table (Recall.ai-inspired architecture)
+-- One bot per meeting; tracks lifecycle: idle → joining → in_meeting → recording → leaving → processing → completed/failed
+CREATE TABLE IF NOT EXISTS bots (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  meeting_url TEXT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'idle'
+    CHECK (status IN ('idle', 'joining', 'in_meeting', 'recording', 'leaving', 'processing', 'completed', 'failed')),
+  error TEXT,
+  pid INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_bots_meeting_id ON bots(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_bots_status ON bots(status);
