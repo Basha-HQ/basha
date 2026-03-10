@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { DemoTranscriptTabs } from '@/components/landing/DemoTranscriptTabs';
+import { RotatingWord } from '@/components/landing/RotatingWord';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
 
@@ -230,7 +231,7 @@ export default function LandingPage() {
             style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)', color: '#ffffff' }}
           >
             Your meetings speak{' '}
-            <span style={{ color: '#f59e0b' }}>Tanglish.</span>
+            <RotatingWord />
             <br />
             Now your notes do too.
           </h1>
