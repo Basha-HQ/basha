@@ -9,8 +9,23 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255),
   password_hash VARCHAR(255), -- null for OAuth users
   plan_type VARCHAR(50) DEFAULT 'free' CHECK (plan_type IN ('free', 'paid')),
+  preferred_languages   TEXT[]  DEFAULT '{}',
+  output_language       TEXT    DEFAULT 'en',
+  meeting_platform      TEXT    DEFAULT 'both',
+  onboarding_completed  BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- OTP verifications (for future email OTP signup — TODO sprint)
+CREATE TABLE IF NOT EXISTS otp_verifications (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email       VARCHAR(255) NOT NULL,
+  otp_code    VARCHAR(6)   NOT NULL,
+  expires_at  TIMESTAMPTZ  NOT NULL,
+  used        BOOLEAN      DEFAULT false,
+  created_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_verifications(email);
 
 -- Accounts table (for NextAuth OAuth)
 CREATE TABLE IF NOT EXISTS accounts (

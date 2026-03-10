@@ -10,6 +10,7 @@ interface DbUser {
   name: string;
   password_hash: string | null;
   plan_type: string;
+  onboarding_completed: boolean;
 }
 
 export const authConfig: NextAuthConfig = {
@@ -66,12 +67,13 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         const dbUser = await queryOne<DbUser>(
-          'SELECT id, plan_type FROM users WHERE email = $1',
+          'SELECT id, plan_type, onboarding_completed FROM users WHERE email = $1',
           [token.email]
         );
         if (dbUser) {
           token.userId = dbUser.id;
           token.planType = dbUser.plan_type;
+          token.onboardingCompleted = dbUser.onboarding_completed;
         }
       }
       return token;
@@ -81,6 +83,7 @@ export const authConfig: NextAuthConfig = {
       if (token.userId) {
         session.user.id = token.userId as string;
         session.user.planType = token.planType as string;
+        session.user.onboardingCompleted = token.onboardingCompleted as boolean;
       }
       return session;
     },
