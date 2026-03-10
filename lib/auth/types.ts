@@ -10,6 +10,7 @@ declare module 'next-auth' {
       image?: string;
       planType: string;
       onboardingCompleted: boolean;
+      googleCalendarConnected: boolean;
     };
   }
 }
@@ -19,5 +20,6 @@ declare module 'next-auth/jwt' {
     userId?: string;
     planType?: string;
     onboardingCompleted?: boolean;
+    googleCalendarConnected?: boolean;
   }
 }

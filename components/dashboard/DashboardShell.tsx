@@ -34,8 +34,13 @@ export function DashboardShell({ children, user }: Props) {
         {/* Logo */}
         <div className="px-5 py-5 border-b border-gray-100">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="text-xl">🗣️</span>
-            <span className="font-bold text-gray-900">LinguaMeet</span>
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#07071a' }}
+            >
+              B
+            </div>
+            <span className="font-bold text-gray-900">Basha</span>
           </Link>
         </div>
 

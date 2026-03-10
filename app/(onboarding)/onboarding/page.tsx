@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LanguageStep } from '@/components/onboarding/LanguageStep';
@@ -21,7 +21,28 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
-  async function saveAndFinish() {
+  // On mount: if returning from Google Calendar OAuth (?cal=1), restore saved state and finish
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('cal') === '1') {
+      let restoredLangs: string[] = [];
+      let restoredPlatform = 'both';
+      try {
+        const saved = localStorage.getItem('basha_onboarding');
+        if (saved) {
+          const parsed = JSON.parse(saved) as { languages?: string[]; platform?: string };
+          restoredLangs = parsed.languages ?? [];
+          restoredPlatform = parsed.platform ?? 'both';
+          localStorage.removeItem('basha_onboarding');
+          setLanguages(restoredLangs);
+          setPlatform(restoredPlatform);
+        }
+      } catch { /* ignore */ }
+      saveAndFinish(restoredLangs, restoredPlatform);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveAndFinish(overrideLangs?: string[], overridePlatform?: string) {
     setSaving(true);
     setStep(5);
     try {
@@ -29,9 +50,9 @@ export default function OnboardingPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          preferred_languages: languages,
+          preferred_languages: overrideLangs ?? languages,
           output_language: 'en',
-          meeting_platform: platform,
+          meeting_platform: overridePlatform ?? platform,
         }),
       });
     } catch {
@@ -42,12 +63,13 @@ export default function OnboardingPage() {
   }
 
   function handleCalendarConnect() {
-    // Placeholder — Google Calendar OAuth will be wired in STEP 5
+    // Save current step state to localStorage before OAuth redirect
+    try {
+      localStorage.setItem('basha_onboarding', JSON.stringify({ languages, platform }));
+    } catch { /* ignore */ }
     setConnecting(true);
-    setTimeout(() => {
-      setConnecting(false);
-      saveAndFinish();
-    }, 1200);
+    const callbackUrl = encodeURIComponent('/onboarding?cal=1');
+    window.location.href = `/api/auth/signin/google?callbackUrl=${callbackUrl}`;
   }
 
   return (
@@ -137,7 +159,7 @@ export default function OnboardingPage() {
           {step === 4 && (
             <CalendarStep
               onConnect={handleCalendarConnect}
-              onSkip={saveAndFinish}
+              onSkip={() => saveAndFinish()}
               onBack={() => setStep(3)}
               connecting={connecting}
             />

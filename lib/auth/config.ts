@@ -11,6 +11,7 @@ interface DbUser {
   password_hash: string | null;
   plan_type: string;
   onboarding_completed: boolean;
+  google_calendar_connected: boolean;
 }
 
 export const authConfig: NextAuthConfig = {
@@ -18,6 +19,13 @@ export const authConfig: NextAuthConfig = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: 'openid email profile https://www.googleapis.com/auth/calendar.readonly',
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
     }),
     CredentialsProvider({
       name: 'credentials',
@@ -60,6 +68,21 @@ export const authConfig: NextAuthConfig = {
             [user.email, user.name]
           );
         }
+        // Store Google OAuth tokens for Calendar access
+        if (account.access_token) {
+          const expiry = account.expires_at
+            ? new Date(account.expires_at * 1000).toISOString()
+            : new Date(Date.now() + 3600 * 1000).toISOString();
+          await queryOne(
+            `UPDATE users SET
+               google_access_token = $1,
+               google_refresh_token = COALESCE($2, google_refresh_token),
+               google_token_expiry = $3,
+               google_calendar_connected = true
+             WHERE email = $4`,
+            [account.access_token, account.refresh_token ?? null, expiry, user.email]
+          );
+        }
       }
       return true;
     },
@@ -67,13 +90,14 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         const dbUser = await queryOne<DbUser>(
-          'SELECT id, plan_type, onboarding_completed FROM users WHERE email = $1',
+          'SELECT id, plan_type, onboarding_completed, google_calendar_connected FROM users WHERE email = $1',
           [token.email]
         );
         if (dbUser) {
           token.userId = dbUser.id;
           token.planType = dbUser.plan_type;
           token.onboardingCompleted = dbUser.onboarding_completed;
+          token.googleCalendarConnected = dbUser.google_calendar_connected;
         }
       }
       return token;
@@ -84,6 +108,7 @@ export const authConfig: NextAuthConfig = {
         session.user.id = token.userId as string;
         session.user.planType = token.planType as string;
         session.user.onboardingCompleted = token.onboardingCompleted as boolean;
+        session.user.googleCalendarConnected = token.googleCalendarConnected as boolean;
       }
       return session;
     },

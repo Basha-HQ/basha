@@ -3,6 +3,7 @@ import { query } from '@/lib/db';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { MeetingCard } from '@/components/meetings/MeetingCard';
+import { UpcomingMeetingsWidget } from '@/components/dashboard/UpcomingMeetingsWidget';
 
 interface Meeting {
   id: string;
@@ -13,7 +14,7 @@ interface Meeting {
   duration: number | null;
 }
 
-export const metadata = { title: 'Dashboard — LinguaMeet' };
+export const metadata = { title: 'Dashboard — Basha' };
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -66,33 +67,40 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Recent meetings */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Recent meetings</h2>
-          <Link href="/meetings" className="text-sm text-indigo-600 hover:underline">
-            View all
-          </Link>
-        </div>
-
-        {recentMeetings.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 border-dashed p-12 text-center">
-            <p className="text-4xl mb-3">🎙️</p>
-            <p className="font-medium text-gray-900 mb-1">No meetings yet</p>
-            <p className="text-gray-500 text-sm mb-6">
-              Start a notetaker to record and transcribe your first meeting
-            </p>
-            <Link href="/new-meeting">
-              <Button>Start Notetaker</Button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent meetings */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Recent meetings</h2>
+            <Link href="/meetings" className="text-sm text-indigo-600 hover:underline">
+              View all
             </Link>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {recentMeetings.map((m) => (
-              <MeetingCard key={m.id} meeting={m} />
-            ))}
-          </div>
-        )}
+
+          {recentMeetings.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 border-dashed p-12 text-center">
+              <p className="text-4xl mb-3">🎙️</p>
+              <p className="font-medium text-gray-900 mb-1">No meetings yet</p>
+              <p className="text-gray-500 text-sm mb-6">
+                Start a notetaker to record and transcribe your first meeting
+              </p>
+              <Link href="/new-meeting">
+                <Button>Start Notetaker</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentMeetings.map((m) => (
+                <MeetingCard key={m.id} meeting={m} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Upcoming meetings (Google Calendar) */}
+        <div>
+          <UpcomingMeetingsWidget />
+        </div>
       </div>
     </div>
   );

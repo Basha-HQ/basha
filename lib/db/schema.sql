@@ -12,7 +12,11 @@ CREATE TABLE IF NOT EXISTS users (
   preferred_languages   TEXT[]  DEFAULT '{}',
   output_language       TEXT    DEFAULT 'en',
   meeting_platform      TEXT    DEFAULT 'both',
-  onboarding_completed  BOOLEAN DEFAULT false,
+  onboarding_completed       BOOLEAN DEFAULT false,
+  google_access_token        TEXT,
+  google_refresh_token       TEXT,
+  google_token_expiry        TIMESTAMPTZ,
+  google_calendar_connected  BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
