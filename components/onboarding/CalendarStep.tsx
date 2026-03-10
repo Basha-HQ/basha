@@ -5,9 +5,10 @@ interface Props {
   onSkip: () => void;
   onBack: () => void;
   connecting: boolean;
+  oauthError?: string | null;
 }
 
-export function CalendarStep({ onConnect, onSkip, onBack, connecting }: Props) {
+export function CalendarStep({ onConnect, onSkip, onBack, connecting, oauthError }: Props) {
   return (
     <div>
       <h2 className="text-2xl font-bold text-white mb-2">Auto-join your meetings</h2>
@@ -35,6 +36,14 @@ export function CalendarStep({ onConnect, onSkip, onBack, connecting }: Props) {
           </div>
         ))}
       </div>
+
+      {/* OAuth error */}
+      {oauthError && (
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' }}>
+          <strong className="font-semibold">Connection failed.</strong>{' '}
+          {oauthError}
+        </div>
+      )}
 
       {/* Connect button */}
       <button

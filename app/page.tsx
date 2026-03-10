@@ -186,6 +186,13 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link
+              href="/pricing"
+              className="text-sm font-medium transition-colors hover:text-amber-400"
+              style={{ color: 'rgba(255,255,255,0.55)' }}
+            >
+              Pricing
+            </Link>
+            <Link
               href="/login"
               className="text-sm font-medium transition-colors hover:text-amber-400"
               style={{ color: 'rgba(255,255,255,0.55)' }}

@@ -45,7 +45,7 @@ export function LoginForm() {
     <div className="w-full max-w-md mx-auto">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-        <p className="text-gray-500 mt-1">Sign in to your LinguaMeet account</p>
+        <p className="text-gray-500 mt-1">Sign in to your Basha account</p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">

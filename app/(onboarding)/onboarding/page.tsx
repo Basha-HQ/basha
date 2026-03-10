@@ -20,11 +20,14 @@ export default function OnboardingPage() {
   const [platform, setPlatform] = useState('both');
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [calendarOAuthError, setCalendarOAuthError] = useState<string | null>(null);
 
-  // On mount: if returning from Google Calendar OAuth (?cal=1), restore saved state and finish
+  // On mount: handle returns from Google Calendar OAuth (?cal=1 success, ?error=... failure)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+
     if (params.get('cal') === '1') {
+      // Successful OAuth redirect — restore state and finish
       let restoredLangs: string[] = [];
       let restoredPlatform = 'both';
       try {
@@ -39,6 +42,21 @@ export default function OnboardingPage() {
         }
       } catch { /* ignore */ }
       saveAndFinish(restoredLangs, restoredPlatform);
+    } else if (params.get('error')) {
+      // OAuth returned an error — restore to step 4 and show error
+      try {
+        const saved = localStorage.getItem('basha_onboarding');
+        if (saved) {
+          const parsed = JSON.parse(saved) as { languages?: string[]; platform?: string };
+          setLanguages(parsed.languages ?? []);
+          setPlatform(parsed.platform ?? 'both');
+          localStorage.removeItem('basha_onboarding');
+        }
+      } catch { /* ignore */ }
+      setStep(4);
+      setCalendarOAuthError(
+        'Google Calendar connection failed. Make sure the Google Calendar API is enabled in your Google Cloud project and the calendar.readonly scope is approved on the OAuth consent screen.'
+      );
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -162,6 +180,7 @@ export default function OnboardingPage() {
               onSkip={() => saveAndFinish()}
               onBack={() => setStep(3)}
               connecting={connecting}
+              oauthError={calendarOAuthError}
             />
           )}
           {step === 5 && (
