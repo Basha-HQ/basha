@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { LanguageStep } from '@/components/onboarding/LanguageStep';
 import { OutputLanguageStep } from '@/components/onboarding/OutputLanguageStep';
@@ -14,11 +14,12 @@ const TOTAL_STEPS = 5;
 const STEP_LABELS = ['Languages', 'Output', 'Platform', 'Calendar', 'Done'];
 
 export default function OnboardingPage() {
-  const router = useRouter();
+  const { update } = useSession();
   const [step, setStep] = useState(1);
   const [languages, setLanguages] = useState<string[]>([]);
   const [platform, setPlatform] = useState('both');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [calendarOAuthError, setCalendarOAuthError] = useState<string | null>(null);
 
@@ -62,9 +63,10 @@ export default function OnboardingPage() {
 
   async function saveAndFinish(overrideLangs?: string[], overridePlatform?: string) {
     setSaving(true);
+    setSaveError(false);
     setStep(5);
     try {
-      await fetch('/api/onboarding', {
+      const res = await fetch('/api/onboarding', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,8 +75,12 @@ export default function OnboardingPage() {
           meeting_platform: overridePlatform ?? platform,
         }),
       });
+      if (!res.ok) throw new Error('Failed to save preferences');
+      // Pass data to ensure trigger === 'update' fires in the jwt callback
+      // so middleware sees onboardingCompleted = true on next navigation
+      await update({ onboardingCompleted: true });
     } catch {
-      // Silent fail — user can still proceed
+      setSaveError(true);
     } finally {
       setSaving(false);
     }
@@ -187,6 +193,8 @@ export default function OnboardingPage() {
             <DoneStep
               onBack={() => setStep(4)}
               saving={saving}
+              error={saveError}
+              onRetry={() => saveAndFinish()}
             />
           )}
         </div>

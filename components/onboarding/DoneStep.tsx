@@ -1,10 +1,10 @@
 'use client';
 
-import Link from 'next/link';
-
 interface Props {
   onBack: () => void;
   saving: boolean;
+  error: boolean;
+  onRetry: () => void;
 }
 
 const FREE_FEATURES = [
@@ -25,7 +25,7 @@ const PAID_FEATURES = [
   'Priority processing',
 ];
 
-export function DoneStep({ onBack, saving }: Props) {
+export function DoneStep({ onBack, saving, error, onRetry }: Props) {
   return (
     <div>
       <div className="text-center mb-8">
@@ -36,16 +36,18 @@ export function DoneStep({ onBack, saving }: Props) {
           B
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">
-          {saving ? 'Setting up your account…' : "You're ready to record"}
+          {saving ? 'Setting up your account…' : error ? 'Something went wrong' : "You're ready to record"}
         </h2>
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
           {saving
             ? 'Saving your preferences'
+            : error
+            ? 'We couldn\u2019t save your preferences. Please try again.'
             : 'Start on the free plan — no credit card required.'}
         </p>
       </div>
 
-      {!saving && (
+      {!saving && !error && (
         <>
           {/* Plan comparison */}
           <div
@@ -54,12 +56,12 @@ export function DoneStep({ onBack, saving }: Props) {
           >
             <div className="grid grid-cols-2 divide-x divide-white/10">
               {/* Free */}
-              <div className="p-5">
+              <div className="p-5 flex flex-col">
                 <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
                   Free
                 </div>
                 <div className="text-xl font-black text-white mb-4">₹0</div>
-                <ul className="space-y-2">
+                <ul className="space-y-2 flex-1">
                   {FREE_FEATURES.map((f, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
                       <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -69,10 +71,17 @@ export function DoneStep({ onBack, saving }: Props) {
                     </li>
                   ))}
                 </ul>
+                <button
+                  onClick={() => { window.location.href = '/dashboard'; }}
+                  className="mt-4 w-full py-2 rounded-lg text-xs font-bold"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.12)' }}
+                >
+                  Get Started
+                </button>
               </div>
 
               {/* Paid */}
-              <div className="p-5" style={{ background: 'rgba(245,158,11,0.05)' }}>
+              <div className="p-5 flex flex-col" style={{ background: 'rgba(245,158,11,0.05)' }}>
                 <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#f59e0b' }}>
                   Pro
                 </div>
@@ -80,7 +89,7 @@ export function DoneStep({ onBack, saving }: Props) {
                   ₹499
                   <span className="text-sm font-normal ml-1" style={{ color: 'rgba(255,255,255,0.35)' }}>/mo</span>
                 </div>
-                <ul className="space-y-2">
+                <ul className="space-y-2 flex-1">
                   {PAID_FEATURES.map((f, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
                       <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" strokeWidth={2.5}>
@@ -90,25 +99,31 @@ export function DoneStep({ onBack, saving }: Props) {
                     </li>
                   ))}
                 </ul>
+                <div
+                  className="mt-4 w-full py-2 rounded-lg text-xs font-bold text-center"
+                  style={{ background: 'rgba(245,158,11,0.08)', color: 'rgba(245,158,11,0.5)', border: '1px solid rgba(245,158,11,0.15)' }}
+                >
+                  Coming Soon
+                </div>
               </div>
             </div>
           </div>
 
           {/* CTAs */}
-          <Link
-            href="/new-meeting"
+          <button
+            onClick={() => { window.location.href = '/new-meeting'; }}
             className="block w-full text-center py-3.5 rounded-xl font-bold text-sm mb-3 btn-amber-shimmer"
             style={{ color: '#07071a' }}
           >
             Record my first meeting →
-          </Link>
-          <Link
-            href="/dashboard"
+          </button>
+          <button
+            onClick={() => { window.location.href = '/dashboard'; }}
             className="block w-full text-center py-3 rounded-xl text-sm font-medium"
             style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}
           >
             Go to dashboard
-          </Link>
+          </button>
 
           <div className="mt-4 text-center">
             <button
@@ -128,6 +143,27 @@ export function DoneStep({ onBack, saving }: Props) {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="#f59e0b" strokeWidth="4" />
             <path className="opacity-75" fill="#f59e0b" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
+        </div>
+      )}
+
+      {error && !saving && (
+        <div className="text-center">
+          <button
+            onClick={onRetry}
+            className="px-6 py-3 rounded-xl font-bold text-sm btn-amber-shimmer"
+            style={{ color: '#07071a' }}
+          >
+            Try again
+          </button>
+          <div className="mt-4">
+            <button
+              onClick={onBack}
+              className="text-xs"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+            >
+              ← Back
+            </button>
+          </div>
         </div>
       )}
     </div>

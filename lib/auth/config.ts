@@ -87,8 +87,8 @@ export const authConfig: NextAuthConfig = {
       return true;
     },
 
-    async jwt({ token, user }) {
-      if (user) {
+    async jwt({ token, user, trigger }) {
+      if (user || trigger === 'update') {
         const dbUser = await queryOne<DbUser>(
           'SELECT id, plan_type, onboarding_completed, google_calendar_connected FROM users WHERE email = $1',
           [token.email]
