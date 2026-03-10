@@ -5,9 +5,9 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "LinguaMeet — AI Meeting Notes for Multilingual Teams",
+  title: "Basha — AI Meeting Notes for Indian Teams",
   description:
-    "Capture and transcribe multilingual Indian meetings. Supports Tamil, Hindi, Telugu, Kannada, and code-mixed speech.",
+    "The AI meeting notetaker built for how India actually speaks. Captures code-mixed Hinglish, Tanglish, and Teluglish meetings and delivers dual transcripts — original + clean English.",
 };
 
 export default function RootLayout({
