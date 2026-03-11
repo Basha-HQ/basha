@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { meetingLink, platform, title } = await req.json();
+  const { meetingLink, platform, title, sourceLanguage, outputLanguage } = await req.json();
 
   if (!meetingLink) {
     return NextResponse.json({ error: 'Meeting link is required' }, { status: 400 });
@@ -43,10 +43,17 @@ export async function POST(req: NextRequest) {
       : 'other');
 
   const meeting = await queryOne<{ id: string }>(
-    `INSERT INTO meetings (user_id, meeting_link, platform, title, status)
-     VALUES ($1, $2, $3, $4, 'pending')
+    `INSERT INTO meetings (user_id, meeting_link, platform, title, status, source_language, output_language)
+     VALUES ($1, $2, $3, $4, 'pending', $5, $6)
      RETURNING id`,
-    [session.user.id, meetingLink, detectedPlatform, title ?? 'Untitled Meeting']
+    [
+      session.user.id,
+      meetingLink,
+      detectedPlatform,
+      title ?? 'Untitled Meeting',
+      sourceLanguage ?? 'auto',
+      outputLanguage ?? 'en',
+    ]
   );
 
   return NextResponse.json({ meeting }, { status: 201 });

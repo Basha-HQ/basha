@@ -11,6 +11,7 @@ interface MeetingRow {
   title: string;
   audio_path: string;
   status: string;
+  source_language: string;
 }
 
 // POST /api/meetings/[id]/process — trigger the AI processing pipeline
@@ -26,7 +27,7 @@ export async function POST(
   const { id } = await params;
 
   const meeting = await queryOne<MeetingRow>(
-    'SELECT id, title, audio_path, status FROM meetings WHERE id = $1 AND user_id = $2',
+    'SELECT id, title, audio_path, status, source_language FROM meetings WHERE id = $1 AND user_id = $2',
     [id, session.user.id]
   );
 
@@ -58,13 +59,18 @@ export async function POST(
     const segments = splitIntoSegments(sttResult.transcript, 0);
 
     // Step 4: Translate each segment + store
+    // Use Sarvam's detected language; fall back to per-meeting source_language if detection was inconclusive
+    const detectedLang = sttResult.language_code && sttResult.language_code !== 'unknown'
+      ? sttResult.language_code
+      : (meeting.source_language ?? 'auto');
+
     const englishSegments: string[] = [];
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       const englishText = await translateToEnglish(
         seg.text,
-        sttResult.language_code ?? 'auto'
+        detectedLang
       );
       englishSegments.push(englishText);
 

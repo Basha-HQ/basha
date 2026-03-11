@@ -19,6 +19,8 @@ import { createBot as createRecallBot } from '@/lib/recall/client';
 interface CreateBotBody {
   meetingUrl: string;
   title?: string;
+  sourceLanguage?: string;
+  outputLanguage?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -27,8 +29,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body: CreateBotBody = await req.json();
-  const { meetingUrl, title } = body;
+  let body: CreateBotBody;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const { meetingUrl, title, sourceLanguage, outputLanguage } = body;
 
   if (!meetingUrl) {
     return NextResponse.json({ error: 'meetingUrl is required' }, { status: 400 });
@@ -39,18 +47,21 @@ export async function POST(req: NextRequest) {
   if (meetingUrl.includes('meet.google.com')) platform = 'google_meet';
   else if (meetingUrl.includes('zoom.us')) platform = 'zoom';
 
-  // 1. Create meeting record
-  const meeting = await queryOne<{ id: string }>(
-    `INSERT INTO meetings (user_id, meeting_link, title, status, platform)
-     VALUES ($1, $2, $3, 'recording', $4)
-     RETURNING id`,
-    [session.user.id, meetingUrl, title || 'Bot Meeting', platform]
-  );
-  if (!meeting) {
-    return NextResponse.json({ error: 'Failed to create meeting' }, { status: 500 });
-  }
+  let meetingId: string | null = null;
 
   try {
+    // 1. Create meeting record
+    const meeting = await queryOne<{ id: string }>(
+      `INSERT INTO meetings (user_id, meeting_link, title, status, platform, source_language, output_language)
+       VALUES ($1, $2, $3, 'recording', $4, $5, $6)
+       RETURNING id`,
+      [session.user.id, meetingUrl, title || 'Bot Meeting', platform, sourceLanguage ?? 'auto', outputLanguage ?? 'en']
+    );
+    if (!meeting) {
+      return NextResponse.json({ error: 'Failed to create meeting record' }, { status: 500 });
+    }
+    meetingId = meeting.id;
+
     // 2. Call Recall.ai to create a bot that joins the meeting
     const recallBot = await createRecallBot(meetingUrl, 'LinguaMeet Bot');
 
@@ -59,7 +70,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO bots (meeting_id, meeting_url, recall_bot_id, status)
        VALUES ($1, $2, $3, 'joining')
        RETURNING id`,
-      [meeting.id, meetingUrl, recallBot.id]
+      [meetingId, meetingUrl, recallBot.id]
     );
     if (!bot) {
       return NextResponse.json({ error: 'Failed to create bot record' }, { status: 500 });
@@ -67,14 +78,16 @@ export async function POST(req: NextRequest) {
 
     console.log(`[api/bots] Created Recall.ai bot ${recallBot.id} → local bot ${bot.id}`);
 
-    return NextResponse.json({ botId: bot.id, meetingId: meeting.id });
+    return NextResponse.json({ botId: bot.id, meetingId });
   } catch (err) {
-    // Clean up the meeting record if Recall.ai call fails
-    await query('DELETE FROM meetings WHERE id = $1', [meeting.id]);
-    console.error('[api/bots] Recall.ai error:', err);
-    return NextResponse.json(
-      { error: `Failed to create bot: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 502 }
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[api/bots] Error:', message);
+
+    // Clean up the meeting record if something failed after creating it
+    if (meetingId) {
+      await query('DELETE FROM meetings WHERE id = $1', [meetingId]).catch(() => {});
+    }
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -136,6 +136,12 @@ export async function DELETE(
     [id]
   );
 
+  // Also update the meeting status so it doesn't stay stuck on 'recording'
+  await query(
+    `UPDATE meetings SET status = 'failed' WHERE id = (SELECT meeting_id FROM bots WHERE id = $1)`,
+    [id]
+  );
+
   return NextResponse.json({ success: true });
 }
 

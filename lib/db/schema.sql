@@ -127,3 +127,30 @@ CREATE TABLE IF NOT EXISTS bots (
 
 CREATE INDEX IF NOT EXISTS idx_bots_meeting_id ON bots(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_bots_status ON bots(status);
+
+-- ── Sprint 2 additions ─────────────────────────────────────────────────────────
+
+-- Per-meeting language preference (overrides user-level defaults)
+ALTER TABLE meetings
+  ADD COLUMN IF NOT EXISTS source_language TEXT DEFAULT 'auto',
+  ADD COLUMN IF NOT EXISTS output_language  TEXT DEFAULT 'en';
+
+-- Auto-join toggle for regular users
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS auto_join_all BOOLEAN DEFAULT false;
+
+-- Per-event recording intents (from Google Calendar events)
+CREATE TABLE IF NOT EXISTS calendar_meeting_intents (
+  id                UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id           UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  calendar_event_id TEXT        NOT NULL,
+  meeting_url       TEXT        NOT NULL,
+  scheduled_start   TIMESTAMPTZ,
+  should_record     BOOLEAN     DEFAULT true,
+  bot_launched      BOOLEAN     DEFAULT false,
+  meeting_id        UUID        REFERENCES meetings(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, calendar_event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_intents_user_id ON calendar_meeting_intents(user_id);
