@@ -83,3 +83,44 @@ Be concise. If a section has no content, use an empty array.`;
     rawSummary: text,
   };
 }
+
+/**
+ * Generate a short, descriptive meeting title from the summary topics.
+ * Returns an empty string on failure so callers can fall back gracefully.
+ */
+export async function generateMeetingTitle(summary: MeetingSummary): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return '';
+
+  const topicsText = summary.topics.slice(0, 5).join(', ');
+  const prompt = `Based on these meeting topics: "${topicsText}"
+
+Write a short, specific meeting title (4-8 words). No quotes, no punctuation at the end.
+Examples: "Q2 Product Roadmap Planning", "Marketing Campaign Budget Review", "Engineering Sprint Retrospective"
+
+Respond with only the title, nothing else.`;
+
+  try {
+    const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://linguameet.app',
+        'X-Title': 'LinguaMeet',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        max_tokens: 32,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) return '';
+    const data = await response.json();
+    const title: string = data.choices?.[0]?.message?.content?.trim() ?? '';
+    return title.replace(/^["']|["']$/g, '').trim();
+  } catch {
+    return '';
+  }
+}

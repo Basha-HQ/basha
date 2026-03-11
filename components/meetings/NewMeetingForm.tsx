@@ -77,12 +77,23 @@ function DarkInput({ label, id, type = 'text', value, onChange, placeholder }: D
   );
 }
 
+function generateDefaultTitle(meetingUrl: string): string {
+  const platform = meetingUrl.includes('meet.google.com')
+    ? 'Google Meet'
+    : meetingUrl.includes('zoom.us')
+    ? 'Zoom Meeting'
+    : 'Meeting';
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${platform} · ${dateStr}, ${timeStr}`;
+}
+
 export function NewMeetingForm() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('form');
   const [activeTab, setActiveTab] = useState<Tab>('bot');
   const [meetingLink, setMeetingLink] = useState('');
-  const [title, setTitle] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState('auto');
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -102,7 +113,7 @@ export function NewMeetingForm() {
       const res = await fetch('/api/bots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meetingUrl: meetingLink, title: title || 'Bot Meeting', sourceLanguage }),
+        body: JSON.stringify({ meetingUrl: meetingLink, title: generateDefaultTitle(meetingLink), sourceLanguage }),
       });
       if (!res.ok) { const e = await safeJson(res); throw new Error(e.error || `Bot launch failed (${res.status})`); }
       const data = await res.json();
@@ -124,7 +135,7 @@ export function NewMeetingForm() {
       const createRes = await fetch('/api/meetings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meetingLink: meetingLink || 'manual-upload', title: title || 'Untitled Meeting', sourceLanguage }),
+        body: JSON.stringify({ meetingLink: meetingLink || 'manual-upload', title: generateDefaultTitle(meetingLink || 'upload'), sourceLanguage }),
       });
       if (!createRes.ok) { const e = await safeJson(createRes); throw new Error(e.error ?? 'Failed to create meeting'); }
       const { meeting } = await createRes.json();
@@ -210,15 +221,6 @@ export function NewMeetingForm() {
         </div>
 
         <div className="p-5 sm:p-6 space-y-5">
-          {/* Common: title */}
-          <DarkInput
-            label="Meeting title"
-            id="title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Q2 Planning · Marketing Team"
-          />
-
           {/* Language pills */}
           <div className="space-y-2">
             <label className="block text-sm font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>

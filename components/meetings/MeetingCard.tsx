@@ -25,9 +25,10 @@ function formatDate(dateStr: string): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const isSameDay = (a: Date, b: Date) =>
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (isSameDay(date, now)) return 'Today';
-  if (isSameDay(date, yesterday)) return 'Yesterday';
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const time = date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  if (isSameDay(date, now)) return `Today at ${time}`;
+  if (isSameDay(date, yesterday)) return `Yesterday at ${time}`;
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ` at ${time}`;
 }
 
 function platformLabel(platform: string): string {

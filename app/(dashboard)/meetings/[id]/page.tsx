@@ -5,6 +5,7 @@ import { TranscriptViewer } from '@/components/transcript/TranscriptViewer';
 import { MeetingSummaryCard } from '@/components/transcript/MeetingSummaryCard';
 import { MeetingStatusPoller } from '@/components/meetings/MeetingStatusPoller';
 import { StopBotButton } from '@/components/meetings/StopBotButton';
+import { MeetingTitleEditor } from '@/components/meetings/MeetingTitleEditor';
 import Link from 'next/link';
 
 interface Meeting {
@@ -97,9 +98,13 @@ export default async function MeetingDetailPage({
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
-              {meeting.title}
-            </h1>
+            {meeting.status === 'completed' ? (
+              <MeetingTitleEditor meetingId={meeting.id} initialTitle={meeting.title} />
+            ) : (
+              <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
+                {meeting.title}
+              </h1>
+            )}
             <div className="flex flex-wrap items-center gap-2 mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
               <span>{platformLabel(meeting.platform)}</span>
               <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>

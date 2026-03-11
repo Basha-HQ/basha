@@ -11,7 +11,7 @@
 import { query, queryOne } from '@/lib/db';
 import { getRecordingUrl, type RecallBot } from '@/lib/recall/client';
 import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
-import { generateSummary } from '@/lib/ai/summarize';
+import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import path from 'path';
 import fs from 'fs';
 
@@ -121,10 +121,17 @@ export async function handleRecordingReady(
     const fullEnglish = englishSegments.join(' ');
     const summary = await generateSummary(fullEnglish, meeting?.title);
 
-    // 7. Mark completed
+    // 6b. Generate AI title from summary topics (best-effort; falls back silently)
+    const aiTitle = await generateMeetingTitle(summary);
+
+    // 7. Mark completed — update title only if AI produced one
     await query(
-      `UPDATE meetings SET status = 'completed', summary = $1, completed_at = NOW() WHERE id = $2`,
-      [JSON.stringify(summary), bot.meeting_id]
+      `UPDATE meetings
+       SET status = 'completed', summary = $1, completed_at = NOW()${aiTitle ? ', title = $3' : ''}
+       WHERE id = $2`,
+      aiTitle
+        ? [JSON.stringify(summary), bot.meeting_id, aiTitle]
+        : [JSON.stringify(summary), bot.meeting_id]
     );
     await query(
       `UPDATE bots SET status = 'completed', updated_at = NOW() WHERE id = $1`,
