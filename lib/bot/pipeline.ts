@@ -65,7 +65,7 @@ export async function handleRecordingReady(
 
     await query(
       `UPDATE meetings SET audio_path = $1 WHERE id = $2`,
-      [`uploads/${userId}/${bot.meeting_id}.${ext}`, bot.meeting_id]
+      [`/uploads/${userId}/${bot.meeting_id}.${ext}`, bot.meeting_id]
     );
 
     // 4. Transcribe with Sarvam AI

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { formatTimestamp } from '@/lib/utils/transcript';
 import { FlagModal } from './FlagModal';
+import { AudioPlayer } from './AudioPlayer';
 
 interface TranscriptRow {
   id: string;
@@ -17,6 +18,7 @@ interface Props {
   meetingId: string;
   transcripts: TranscriptRow[];
   meetingTitle: string;
+  audioPath?: string;
 }
 
 // Assign a consistent color per speaker label
@@ -42,10 +44,34 @@ function speakerLabel(speaker: string): string {
   return speaker;
 }
 
-export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props) {
+export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath }: Props) {
   const [search, setSearch] = useState('');
   const [flagTarget, setFlagTarget] = useState<TranscriptRow | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1);
+  const [audioDuration, setAudioDuration] = useState(0);
+
+  const segmentRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const seekAudioRef = useRef<((s: number) => void) | null>(null);
+
+  // Stable callback — prevents AudioPlayer's seek-registration useEffect from
+  // re-running on every render due to inline arrow function reference changes.
+  const handleRegisterSeek = useCallback((fn: (s: number) => void) => {
+    seekAudioRef.current = fn;
+  }, []);
+
+  // Compute effective timestamps: use real DB values if available, otherwise distribute
+  // evenly across the known audio duration for existing recordings that have all-zero timestamps.
+  const effectiveTimestamps = useMemo(() => {
+    const hasReal = transcripts.some((t) => (t.timestamp_seconds ?? 0) > 0);
+    if (hasReal) return transcripts.map((t) => t.timestamp_seconds ?? 0);
+    if (audioDuration > 0 && transcripts.length > 0) {
+      return transcripts.map((_, i) =>
+        Math.round((i / transcripts.length) * audioDuration)
+      );
+    }
+    return transcripts.map(() => 0);
+  }, [transcripts, audioDuration]);
 
   // Build a stable speaker → index map from all transcripts (not just filtered)
   const speakerMap = useMemo(() => {
@@ -66,6 +92,12 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props
     );
   }, [search, transcripts]);
 
+  // Auto-scroll to active segment (suppressed during search to avoid interrupting the user)
+  useEffect(() => {
+    if (activeSegmentIndex < 0 || search.trim()) return;
+    segmentRefs.current[activeSegmentIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [activeSegmentIndex, search]);
+
   async function handleDownload() {
     setDownloading(true);
     const res = await fetch(`/api/meetings/${meetingId}/transcript?download=true`);
@@ -79,11 +111,17 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props
     setDownloading(false);
   }
 
+  const activeSegmentId = activeSegmentIndex >= 0 ? transcripts[activeSegmentIndex]?.id : null;
+
   return (
     <>
       <div
-        className="rounded-2xl overflow-hidden"
-        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+        className="rounded-2xl"
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          overflow: 'clip',
+        }}
       >
         {/* Header */}
         <div
@@ -153,6 +191,17 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props
           </button>
         </div>
 
+        {/* Audio player — only when audioPath is provided */}
+        {audioPath && (
+          <AudioPlayer
+            audioPath={audioPath}
+            effectiveTimestamps={effectiveTimestamps}
+            onActiveSegmentChange={setActiveSegmentIndex}
+            onRegisterSeek={handleRegisterSeek}
+            onDurationLoad={setAudioDuration}
+          />
+        )}
+
         {/* Segments */}
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
@@ -169,17 +218,27 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props
             </p>
           </div>
         ) : (
-          <div>
-            {filtered.map((seg, idx) => (
-              <TranscriptSegment
-                key={seg.id}
-                segment={seg}
-                highlight={search}
-                onFlag={() => setFlagTarget(seg)}
-                speakerMap={speakerMap}
-                isLast={idx === filtered.length - 1}
-              />
-            ))}
+          <div className={audioPath ? 'overflow-y-auto max-h-[65vh]' : undefined}>
+            {filtered.map((seg, idx) => {
+              const fullIdx = transcripts.findIndex((t) => t.id === seg.id);
+              const displayTs = fullIdx >= 0 ? effectiveTimestamps[fullIdx] : (seg.timestamp_seconds ?? 0);
+              return (
+                <TranscriptSegment
+                  key={seg.id}
+                  segment={seg}
+                  displayTimestamp={displayTs}
+                  highlight={search}
+                  onFlag={() => setFlagTarget(seg)}
+                  speakerMap={speakerMap}
+                  isLast={idx === filtered.length - 1}
+                  isActive={seg.id === activeSegmentId}
+                  onSeek={audioPath ? () => { seekAudioRef.current?.(displayTs); } : undefined}
+                  domRef={(el) => {
+                    if (fullIdx >= 0) segmentRefs.current[fullIdx] = el;
+                  }}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -210,34 +269,62 @@ function highlightText(text: string, query: string): React.ReactNode {
 
 function TranscriptSegment({
   segment,
+  displayTimestamp,
   highlight,
   onFlag,
   speakerMap,
   isLast,
+  isActive,
+  onSeek,
+  domRef,
 }: {
   segment: TranscriptRow;
+  displayTimestamp: number;
   highlight: string;
   onFlag: () => void;
   speakerMap: Map<string, number>;
   isLast: boolean;
+  isActive?: boolean;
+  onSeek?: () => void;
+  domRef?: (el: HTMLDivElement | null) => void;
 }) {
   const sc = segment.speaker ? getSpeakerColor(segment.speaker, speakerMap) : null;
 
   return (
     <div
       className="group px-6 py-4 transition-colors"
-      style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)' }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+      ref={domRef}
+      style={{
+        borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)',
+        borderLeft: isActive ? '2px solid rgba(245,158,11,0.5)' : '2px solid transparent',
+        background: isActive ? 'rgba(245,158,11,0.06)' : 'transparent',
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = isActive ? 'rgba(245,158,11,0.06)' : 'transparent';
+      }}
     >
       <div className="flex items-start gap-4">
-        {/* Timestamp */}
-        <span
-          className="text-xs font-mono mt-0.5 shrink-0 w-10 tabular-nums"
-          style={{ color: '#f59e0b' }}
-        >
-          {formatTimestamp(segment.timestamp_seconds ?? 0)}
-        </span>
+        {/* Timestamp — clickable when audio is available */}
+        {onSeek ? (
+          <button
+            onClick={onSeek}
+            className="text-xs font-mono mt-0.5 shrink-0 w-10 tabular-nums hover:opacity-70 transition-opacity cursor-pointer"
+            style={{ color: '#f59e0b' }}
+            title="Seek to this point"
+          >
+            {formatTimestamp(displayTimestamp)}
+          </button>
+        ) : (
+          <span
+            className="text-xs font-mono mt-0.5 shrink-0 w-10 tabular-nums"
+            style={{ color: '#f59e0b' }}
+          >
+            {formatTimestamp(displayTimestamp)}
+          </span>
+        )}
 
         {/* Content */}
         <div className="flex-1 min-w-0 space-y-2">

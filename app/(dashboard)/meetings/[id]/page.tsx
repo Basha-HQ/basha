@@ -18,6 +18,7 @@ interface Meeting {
   summary: string | null;
   created_at: string;
   completed_at: string | null;
+  audio_path: string | null;
 }
 
 interface TranscriptRow {
@@ -50,7 +51,7 @@ export default async function MeetingDetailPage({
   const userId = session!.user.id;
 
   const meeting = await queryOne<Meeting>(
-    `SELECT id, title, meeting_link, platform, status, duration, summary, created_at, completed_at
+    `SELECT id, title, meeting_link, platform, status, duration, summary, created_at, completed_at, audio_path
      FROM meetings WHERE id = $1 AND user_id = $2`,
     [id, userId]
   );
@@ -221,7 +222,14 @@ export default async function MeetingDetailPage({
         {meeting.status === 'completed' && (
           <div className="space-y-6">
             {summary && <MeetingSummaryCard summary={summary} />}
-            <TranscriptViewer meetingId={id} transcripts={transcripts} meetingTitle={meeting.title} />
+            <TranscriptViewer
+              meetingId={id}
+              transcripts={transcripts}
+              meetingTitle={meeting.title}
+              audioPath={meeting.audio_path
+                ? (meeting.audio_path.startsWith('/') ? meeting.audio_path : `/${meeting.audio_path}`)
+                : undefined}
+            />
           </div>
         )}
       </div>

@@ -200,10 +200,11 @@ async function transcribeAudioBatch(
   const result = (await resultRes.json()) as {
     transcript?: string;
     language_code?: string;
-    results?: Array<{ transcript: string; language_code?: string }>;
-    // Diarized output — Sarvam may use either key
-    diarized_transcript?: { entries?: DiarizedEntry[] };
-    diarized_content?: { entries?: DiarizedEntry[] };
+    // results[] may include per-chunk timing when with_timestamps: true
+    results?: Array<{ transcript: string; language_code?: string; start?: number; end?: number }>;
+    // Diarized output — Sarvam may return { entries: [] } or a flat array
+    diarized_transcript?: { entries?: DiarizedEntry[] } | DiarizedEntry[];
+    diarized_content?: { entries?: DiarizedEntry[] } | DiarizedEntry[];
   };
 
   // Normalise: batch result can be { transcript } or { results: [{transcript}] }
@@ -214,13 +215,26 @@ async function transcribeAudioBatch(
   const language_code =
     result.language_code ?? result.results?.[0]?.language_code ?? 'unknown';
 
-  // Extract diarized entries if present
-  const diarized_entries: DiarizedEntry[] =
-    result.diarized_transcript?.entries ??
-    result.diarized_content?.entries ??
-    [];
+  // Extract diarized entries — handle both { entries: [] } and flat array shapes
+  const rawDiarized = result.diarized_transcript ?? result.diarized_content;
+  const diarized_entries: DiarizedEntry[] = Array.isArray(rawDiarized)
+    ? rawDiarized
+    : (rawDiarized as { entries?: DiarizedEntry[] } | undefined)?.entries ?? [];
 
-  return { transcript, language_code, diarized_entries };
+  // If no diarized entries but results[] has per-chunk start/end, synthesise entries
+  const finalEntries: DiarizedEntry[] =
+    diarized_entries.length > 0
+      ? diarized_entries
+      : (result.results ?? [])
+          .filter((r) => typeof r.start === 'number' && typeof r.end === 'number')
+          .map((r) => ({
+            speaker: 'SPEAKER_00',
+            transcript: r.transcript,
+            start: r.start!,
+            end: r.end!,
+          }));
+
+  return { transcript, language_code, diarized_entries: finalEntries };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
