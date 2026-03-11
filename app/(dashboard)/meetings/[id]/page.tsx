@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { TranscriptViewer } from '@/components/transcript/TranscriptViewer';
 import { MeetingSummaryCard } from '@/components/transcript/MeetingSummaryCard';
 import { MeetingStatusPoller } from '@/components/meetings/MeetingStatusPoller';
+import { StopBotButton } from '@/components/meetings/StopBotButton';
 import Link from 'next/link';
 
 interface Meeting {
@@ -24,6 +25,7 @@ interface TranscriptRow {
   timestamp_seconds: number;
   original_text: string;
   english_text: string | null;
+  speaker: string | null;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -55,7 +57,7 @@ export default async function MeetingDetailPage({
   if (!meeting) notFound();
 
   const transcripts = await query<TranscriptRow>(
-    `SELECT id, segment_index, timestamp_seconds, original_text, english_text
+    `SELECT id, segment_index, timestamp_seconds, original_text, english_text, speaker
      FROM transcripts WHERE meeting_id = $1 ORDER BY segment_index`,
     [id]
   );
@@ -154,6 +156,7 @@ export default async function MeetingDetailPage({
                 : 'Upload audio from the meeting to start processing.'}
             </p>
             {bot && <MeetingStatusPoller botId={bot.id} meetingStatus={meeting.status} />}
+            {bot && <StopBotButton botId={bot.id} />}
           </div>
         )}
 

@@ -55,15 +55,20 @@ function getHeaders() {
 /** Create a bot that joins the given meeting URL. */
 export async function createBot(
   meetingUrl: string,
-  botName = 'LinguaMeet Bot'
+  botName = 'LinguaMeet Bot',
+  webhookUrl?: string
 ): Promise<RecallBot> {
+  const body: Record<string, unknown> = {
+    meeting_url: meetingUrl,
+    bot_name: botName,
+  };
+  if (webhookUrl) {
+    body.webhook_url = webhookUrl;
+  }
   const res = await fetch(`${getBase()}/bot`, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify({
-      meeting_url: meetingUrl,
-      bot_name: botName,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

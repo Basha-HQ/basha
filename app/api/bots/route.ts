@@ -63,7 +63,11 @@ export async function POST(req: NextRequest) {
     meetingId = meeting.id;
 
     // 2. Call Recall.ai to create a bot that joins the meeting
-    const recallBot = await createRecallBot(meetingUrl, 'LinguaMeet Bot');
+    // Only register webhook for public URLs — Recall.ai blocks localhost for security
+    const baseUrl = process.env.NEXTAUTH_URL ?? '';
+    const isPublic = baseUrl.startsWith('https://');
+    const webhookUrl = isPublic ? `${baseUrl}/api/webhooks/recall` : undefined;
+    const recallBot = await createRecallBot(meetingUrl, 'Basha', webhookUrl);
 
     // 3. Store bot record with Recall.ai bot ID
     const bot = await queryOne<{ id: string }>(

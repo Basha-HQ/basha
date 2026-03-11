@@ -7,10 +7,18 @@
 const SARVAM_BASE_URL = 'https://api.sarvam.ai';
 const BATCH_STT_BASE = `${SARVAM_BASE_URL}/speech-to-text/job/v1`;
 
+export interface DiarizedEntry {
+  speaker: string;    // e.g. "SPEAKER_00", "SPEAKER_01"
+  transcript: string;
+  start: number;      // seconds from meeting start
+  end: number;
+}
+
 export interface SarvamSTTResponse {
   transcript: string;
   language_code: string;
   language_probability?: number;
+  diarized_entries?: DiarizedEntry[];
 }
 
 export interface SarvamTranslationResponse {
@@ -72,8 +80,8 @@ async function transcribeAudioBatch(
       job_parameters: {
         model: 'saaras:v3',
         mode: 'transcribe',
-        with_timestamps: false,
-        with_diarization: false,
+        with_timestamps: true,
+        with_diarization: true,
       },
     }),
   });
@@ -192,8 +200,10 @@ async function transcribeAudioBatch(
   const result = (await resultRes.json()) as {
     transcript?: string;
     language_code?: string;
-    // batch result may be an array of segments
     results?: Array<{ transcript: string; language_code?: string }>;
+    // Diarized output — Sarvam may use either key
+    diarized_transcript?: { entries?: DiarizedEntry[] };
+    diarized_content?: { entries?: DiarizedEntry[] };
   };
 
   // Normalise: batch result can be { transcript } or { results: [{transcript}] }
@@ -204,7 +214,13 @@ async function transcribeAudioBatch(
   const language_code =
     result.language_code ?? result.results?.[0]?.language_code ?? 'unknown';
 
-  return { transcript, language_code };
+  // Extract diarized entries if present
+  const diarized_entries: DiarizedEntry[] =
+    result.diarized_transcript?.entries ??
+    result.diarized_content?.entries ??
+    [];
+
+  return { transcript, language_code, diarized_entries };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -154,3 +154,8 @@ CREATE TABLE IF NOT EXISTS calendar_meeting_intents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_intents_user_id ON calendar_meeting_intents(user_id);
+
+-- ── Sprint 3 additions ─────────────────────────────────────────────────────────
+
+-- Speaker diarization column for transcript segments
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker TEXT;

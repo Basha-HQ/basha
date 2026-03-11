@@ -2,9 +2,6 @@
 
 import { useState, useMemo } from 'react';
 import { formatTimestamp } from '@/lib/utils/transcript';
-import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { FlagModal } from './FlagModal';
 
 interface TranscriptRow {
@@ -13,6 +10,7 @@ interface TranscriptRow {
   timestamp_seconds: number;
   original_text: string;
   english_text: string | null;
+  speaker: string | null;
 }
 
 interface Props {
@@ -21,10 +19,42 @@ interface Props {
   meetingTitle: string;
 }
 
+// Assign a consistent color per speaker label
+const SPEAKER_COLORS: Array<{ color: string; bg: string; border: string }> = [
+  { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
+  { color: '#6366f1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.25)' },
+  { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.2)' },
+  { color: '#fb7185', bg: 'rgba(251,113,133,0.1)', border: 'rgba(251,113,133,0.2)' },
+  { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.2)' },
+];
+
+function getSpeakerColor(speaker: string, speakerMap: Map<string, number>) {
+  if (!speakerMap.has(speaker)) {
+    speakerMap.set(speaker, speakerMap.size);
+  }
+  return SPEAKER_COLORS[speakerMap.get(speaker)! % SPEAKER_COLORS.length];
+}
+
+function speakerLabel(speaker: string): string {
+  // "SPEAKER_00" → "Speaker 1", "SPEAKER_01" → "Speaker 2", etc.
+  const match = speaker.match(/(\d+)$/);
+  if (match) return `Speaker ${parseInt(match[1], 10) + 1}`;
+  return speaker;
+}
+
 export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props) {
   const [search, setSearch] = useState('');
   const [flagTarget, setFlagTarget] = useState<TranscriptRow | null>(null);
   const [downloading, setDownloading] = useState(false);
+
+  // Build a stable speaker → index map from all transcripts (not just filtered)
+  const speakerMap = useMemo(() => {
+    const map = new Map<string, number>();
+    transcripts.forEach((t) => {
+      if (t.speaker && !map.has(t.speaker)) map.set(t.speaker, map.size);
+    });
+    return map;
+  }, [transcripts]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -51,73 +81,125 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle }: Props
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="font-semibold text-gray-900 shrink-0">
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+      >
+        {/* Header */}
+        <div
+          className="px-6 py-4 flex items-center justify-between gap-4"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </div>
+            <h2 className="font-semibold text-sm" style={{ color: 'rgba(255,255,255,0.9)' }}>
               Transcript
               {search && (
-                <span className="text-gray-400 font-normal text-sm ml-2">
+                <span className="font-normal text-xs ml-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
                   {filtered.length} result{filtered.length !== 1 ? 's' : ''}
                 </span>
               )}
             </h2>
-            <div className="flex items-center gap-3 flex-1 max-w-sm">
-              <Input
-                placeholder="Search transcript..."
+          </div>
+
+          <div className="flex items-center gap-3 flex-1 max-w-xs">
+            {/* Search */}
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search transcript…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="text-sm"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs transition-colors outline-none"
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'rgba(255,255,255,0.85)',
+                }}
               />
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleDownload}
-              loading={downloading}
-            >
-              ⬇ Download TXT
-            </Button>
           </div>
-        </CardHeader>
 
-        <CardBody className="p-0">
-          {filtered.length === 0 ? (
-            <div className="py-12 text-center text-gray-400">
-              <p className="text-2xl mb-2">🔍</p>
-              <p>No results for &quot;{search}&quot;</p>
+          {/* Download */}
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-opacity disabled:opacity-50 cursor-pointer"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.55)',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {downloading ? 'Downloading…' : 'Download TXT'}
+          </button>
+        </div>
+
+        {/* Segments */}
+        {filtered.length === 0 ? (
+          <div className="py-16 text-center">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-3"
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.2)' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
             </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {filtered.map((seg) => (
-                <TranscriptSegment
-                  key={seg.id}
-                  segment={seg}
-                  highlight={search}
-                  onFlag={() => setFlagTarget(seg)}
-                />
-              ))}
-            </div>
-          )}
-        </CardBody>
-      </Card>
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              No results for &ldquo;{search}&rdquo;
+            </p>
+          </div>
+        ) : (
+          <div>
+            {filtered.map((seg, idx) => (
+              <TranscriptSegment
+                key={seg.id}
+                segment={seg}
+                highlight={search}
+                onFlag={() => setFlagTarget(seg)}
+                speakerMap={speakerMap}
+                isLast={idx === filtered.length - 1}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {flagTarget && (
-        <FlagModal
-          segment={flagTarget}
-          onClose={() => setFlagTarget(null)}
-        />
+        <FlagModal segment={flagTarget} onClose={() => setFlagTarget(null)} />
       )}
     </>
   );
 }
 
-function highlight(text: string, query: string): React.ReactNode {
+function highlightText(text: string, query: string): React.ReactNode {
   if (!query.trim()) return text;
   const parts = text.split(new RegExp(`(${query})`, 'gi'));
   return parts.map((part, i) =>
     part.toLowerCase() === query.toLowerCase() ? (
-      <mark key={i} className="bg-yellow-200 rounded px-0.5">
+      <mark
+        key={i}
+        style={{ background: 'rgba(245,158,11,0.28)', color: 'inherit', borderRadius: '2px', padding: '0 2px' }}
+      >
         {part}
       </mark>
     ) : (
@@ -128,34 +210,66 @@ function highlight(text: string, query: string): React.ReactNode {
 
 function TranscriptSegment({
   segment,
-  highlight: q,
+  highlight,
   onFlag,
+  speakerMap,
+  isLast,
 }: {
   segment: TranscriptRow;
   highlight: string;
   onFlag: () => void;
+  speakerMap: Map<string, number>;
+  isLast: boolean;
 }) {
+  const sc = segment.speaker ? getSpeakerColor(segment.speaker, speakerMap) : null;
+
   return (
-    <div className="group px-6 py-4 hover:bg-gray-50 transition-colors">
+    <div
+      className="group px-6 py-4 transition-colors"
+      style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
       <div className="flex items-start gap-4">
         {/* Timestamp */}
-        <span className="text-xs font-mono text-gray-400 mt-1 shrink-0 w-12">
+        <span
+          className="text-xs font-mono mt-0.5 shrink-0 w-10 tabular-nums"
+          style={{ color: '#f59e0b' }}
+        >
           {formatTimestamp(segment.timestamp_seconds ?? 0)}
         </span>
 
         {/* Content */}
-        <div className="flex-1 space-y-2">
+        <div className="flex-1 min-w-0 space-y-2">
+          {/* Speaker chip */}
+          {segment.speaker && sc && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold"
+              style={{ color: sc.color, background: sc.bg, border: `1px solid ${sc.border}` }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.color }} />
+              {speakerLabel(segment.speaker)}
+            </span>
+          )}
+
+          {/* Original text */}
           <div>
-            <p className="text-xs font-semibold text-gray-400 mb-1">Original</p>
-            <p className="text-gray-800 text-sm leading-relaxed">
-              {highlight(segment.original_text, q)}
+            <p className="text-xs font-medium mb-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Original
+            </p>
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
+              {highlightText(segment.original_text, highlight)}
             </p>
           </div>
+
+          {/* English translation */}
           {segment.english_text && (
             <div>
-              <p className="text-xs font-semibold text-indigo-500 mb-1">English</p>
-              <p className="text-gray-700 text-sm leading-relaxed">
-                {highlight(segment.english_text, q)}
+              <p className="text-xs font-medium mb-0.5" style={{ color: '#6366f1' }}>
+                English
+              </p>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                {highlightText(segment.english_text, highlight)}
               </p>
             </div>
           )}
@@ -164,10 +278,16 @@ function TranscriptSegment({
         {/* Flag button */}
         <button
           onClick={onFlag}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 shrink-0 text-sm mt-1"
+          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 p-1 rounded-md cursor-pointer"
+          style={{ color: 'rgba(255,255,255,0.2)' }}
           title="Flag incorrect transcript"
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#fb7185')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}
         >
-          🚩
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
         </button>
       </div>
     </div>
