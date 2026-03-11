@@ -55,10 +55,7 @@ export async function POST(
     // Step 2: Transcribe with Sarvam AI
     const sttResult = await transcribeAudio(audioBuffer, fileName);
 
-    // Step 3: Split into segments (saaras:v3 returns a single transcript string)
-    const segments = splitIntoSegments(sttResult.transcript, 0);
-
-    // Step 4: Translate each segment + store
+    // Step 3: Detect language
     // Use Sarvam's detected language; fall back to per-meeting source_language if detection was inconclusive
     const detectedLang = sttResult.language_code && sttResult.language_code !== 'unknown'
       ? sttResult.language_code
@@ -66,19 +63,37 @@ export async function POST(
 
     const englishSegments: string[] = [];
 
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      const englishText = await translateToEnglish(
-        seg.text,
-        detectedLang
-      );
-      englishSegments.push(englishText);
+    // Step 4: Translate each segment + store (diarization-aware)
+    const hasDiarization = (sttResult.diarized_entries?.length ?? 0) > 0;
 
-      await query(
-        `INSERT INTO transcripts (meeting_id, segment_index, timestamp_seconds, original_text, english_text)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [id, i, seg.startSeconds, seg.text, englishText]
-      );
+    if (hasDiarization) {
+      // Use diarized entries: real timestamps + speaker labels
+      const entries = sttResult.diarized_entries!;
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const englishText = await translateToEnglish(entry.transcript, detectedLang);
+        englishSegments.push(englishText);
+        await query(
+          `INSERT INTO transcripts
+             (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [id, i, Math.round(entry.start), entry.transcript, englishText, entry.speaker]
+        );
+      }
+    } else {
+      // Fallback: split by sentence, no speaker stored
+      const segments = splitIntoSegments(sttResult.transcript, 0);
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const englishText = await translateToEnglish(seg.text, detectedLang);
+        englishSegments.push(englishText);
+        await query(
+          `INSERT INTO transcripts
+             (meeting_id, segment_index, timestamp_seconds, original_text, english_text)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [id, i, seg.startSeconds, seg.text, englishText]
+        );
+      }
     }
 
     // Step 5: Generate summary from full English transcript

@@ -221,7 +221,7 @@ export default async function MeetingDetailPage({
         {/* Completed — show summary + transcript */}
         {meeting.status === 'completed' && (
           <div className="space-y-6">
-            {summary && <MeetingSummaryCard summary={summary} />}
+            {summary && <MeetingSummaryCard summary={summary} duration={meeting.duration} />}
             <TranscriptViewer
               meetingId={id}
               transcripts={transcripts}

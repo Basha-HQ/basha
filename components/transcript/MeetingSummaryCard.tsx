@@ -1,4 +1,5 @@
 interface Summary {
+  overview?: string;
   topics: string[];
   decisions: string[];
   notes: string[];
@@ -49,9 +50,15 @@ const sections = [
   },
 ];
 
-export function MeetingSummaryCard({ summary }: { summary: Summary }) {
+export function MeetingSummaryCard({
+  summary,
+  duration,
+}: {
+  summary: Summary;
+  duration?: number | null;
+}) {
   const activeSections = sections.filter((s) => summary[s.key]?.length > 0);
-  if (activeSections.length === 0) return null;
+  if (activeSections.length === 0 && !summary.overview && !duration) return null;
 
   return (
     <div
@@ -79,6 +86,36 @@ export function MeetingSummaryCard({ summary }: { summary: Summary }) {
           Meeting Summary
         </h2>
       </div>
+
+      {/* Overview + duration */}
+      {(summary.overview || duration) && (
+        <div
+          className="px-6 py-4"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          {duration && (
+            <div className="flex items-center gap-1.5 mb-3">
+              <svg
+                width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"
+                style={{ color: 'rgba(255,255,255,0.3)' }}
+              >
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                {Math.round(duration / 60)} min
+              </span>
+            </div>
+          )}
+          {summary.overview && (
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+              {summary.overview}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       <div className="p-6">

@@ -7,6 +7,7 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 const OPENROUTER_MODEL = 'nvidia/nemotron-3-nano-30b-a3b:free';
 
 export interface MeetingSummary {
+  overview?: string;
   topics: string[];
   decisions: string[];
   notes: string[];
@@ -25,9 +26,10 @@ export async function generateSummary(
 
   const prompt = `You are a meeting notes assistant. Analyze the following meeting transcript and extract:
 
-1. Topics Discussed (bullet points)
-2. Key Decisions Made (bullet points)
-3. Important Notes / Action Items (bullet points)
+1. A brief overview (1-2 sentences describing the main purpose and outcome)
+2. Topics Discussed (bullet points)
+3. Key Decisions Made (bullet points)
+4. Important Notes / Action Items (bullet points)
 
 Meeting: ${meetingTitle ?? 'Team Meeting'}
 
@@ -36,12 +38,13 @@ ${englishTranscript}
 
 Respond in this exact JSON format:
 {
+  "overview": "1-2 sentences capturing the main purpose and outcome of this meeting.",
   "topics": ["topic 1", "topic 2"],
   "decisions": ["decision 1", "decision 2"],
   "notes": ["note 1", "note 2"]
 }
 
-Be concise. If a section has no content, use an empty array.`;
+Be concise. The overview must be 1–2 sentences. If a section has no content, use an empty array.`;
 
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: 'POST',
@@ -77,6 +80,9 @@ Be concise. If a section has no content, use an empty array.`;
   const parsed = JSON.parse(jsonMatch[0]);
 
   return {
+    overview: typeof parsed.overview === 'string' && parsed.overview.trim()
+      ? parsed.overview.trim()
+      : undefined,
     topics: parsed.topics ?? [],
     decisions: parsed.decisions ?? [],
     notes: parsed.notes ?? [],

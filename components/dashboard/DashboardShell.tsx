@@ -103,7 +103,7 @@ function SidebarContent({ pathname, user, onClose }: { pathname: string; user: U
             L
           </div>
           <div className="flex flex-col leading-none">
-            <span className="font-bold text-sm" style={{ color: 'rgba(255,255,255,0.92)' }}>LinguaMeet</span>
+            <span className="font-bold text-sm" style={{ color: 'rgba(255,255,255,0.92)' }}>Basha</span>
             <span className="text-[10px] font-normal" style={{ color: 'rgba(255,255,255,0.35)' }}>AI Meeting Notes</span>
           </div>
         </Link>
@@ -231,7 +231,7 @@ export function DashboardShell({ children, user }: Props) {
           >
             L
           </div>
-          <span className="font-bold text-sm" style={{ color: 'rgba(255,255,255,0.92)' }}>LinguaMeet</span>
+          <span className="font-bold text-sm" style={{ color: 'rgba(255,255,255,0.92)' }}>Basha</span>
         </Link>
         <Link
           href="/new-meeting"
