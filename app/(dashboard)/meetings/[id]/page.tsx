@@ -64,6 +64,15 @@ export default async function MeetingDetailPage({
     [id]
   );
 
+  // Fetch IDs of segments this user has already flagged, for the visual indicator
+  const flaggedRows = await query<{ transcript_id: string }>(
+    `SELECT transcript_id FROM flags
+     WHERE user_id = $1
+       AND transcript_id = ANY(SELECT id FROM transcripts WHERE meeting_id = $2)`,
+    [userId, id]
+  );
+  const flaggedSegmentIds = flaggedRows.map((r) => r.transcript_id);
+
   const summary = meeting.summary ? JSON.parse(meeting.summary) : null;
 
   // Fetch associated bot so the status poller can poll it
@@ -229,6 +238,7 @@ export default async function MeetingDetailPage({
               audioPath={meeting.audio_path
                 ? (meeting.audio_path.startsWith('/') ? meeting.audio_path : `/${meeting.audio_path}`)
                 : undefined}
+              flaggedSegmentIds={flaggedSegmentIds}
             />
           </div>
         )}

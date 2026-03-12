@@ -159,3 +159,13 @@ CREATE INDEX IF NOT EXISTS idx_intents_user_id ON calendar_meeting_intents(user_
 
 -- Speaker diarization column for transcript segments
 ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS speaker TEXT;
+
+-- ── Sprint 4 additions ─────────────────────────────────────────────────────────
+
+-- Structured wrong→correct pair for Sarvam AI training data
+ALTER TABLE flags
+  ADD COLUMN IF NOT EXISTS suggested_correction TEXT;
+
+-- Prevent same user flagging same segment more than once (atomic, race-safe)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_flags_unique_user_segment
+  ON flags (transcript_id, user_id);

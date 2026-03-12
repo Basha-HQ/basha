@@ -19,6 +19,7 @@ interface Props {
   transcripts: TranscriptRow[];
   meetingTitle: string;
   audioPath?: string;
+  flaggedSegmentIds?: string[];
 }
 
 // Assign a consistent color per speaker label
@@ -44,7 +45,7 @@ function speakerLabel(speaker: string): string {
   return speaker;
 }
 
-export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath }: Props) {
+export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath, flaggedSegmentIds }: Props) {
   const [search, setSearch] = useState('');
   const [flagTarget, setFlagTarget] = useState<TranscriptRow | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -232,6 +233,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
                   speakerMap={speakerMap}
                   isLast={idx === filtered.length - 1}
                   isActive={seg.id === activeSegmentId}
+                  isFlagged={flaggedSegmentIds?.includes(seg.id) ?? false}
                   onSeek={audioPath ? () => { seekAudioRef.current?.(displayTs); } : undefined}
                   domRef={(el) => {
                     if (fullIdx >= 0) segmentRefs.current[fullIdx] = el;
@@ -275,6 +277,7 @@ function TranscriptSegment({
   speakerMap,
   isLast,
   isActive,
+  isFlagged,
   onSeek,
   domRef,
 }: {
@@ -285,6 +288,7 @@ function TranscriptSegment({
   speakerMap: Map<string, number>;
   isLast: boolean;
   isActive?: boolean;
+  isFlagged?: boolean;
   onSeek?: () => void;
   domRef?: (el: HTMLDivElement | null) => void;
 }) {
@@ -362,16 +366,21 @@ function TranscriptSegment({
           )}
         </div>
 
-        {/* Flag button */}
+        {/* Flag button — filled + always visible when already flagged */}
         <button
           onClick={onFlag}
-          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 p-1 rounded-md cursor-pointer"
-          style={{ color: 'rgba(255,255,255,0.2)' }}
-          title="Flag incorrect transcript"
+          className={`transition-opacity shrink-0 mt-0.5 p-1 rounded-md cursor-pointer ${
+            isFlagged ? 'opacity-60' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          style={{ color: isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)' }}
+          title={isFlagged ? 'Already flagged — click to update' : 'Flag incorrect transcript'}
           onMouseEnter={(e) => (e.currentTarget.style.color = '#fb7185')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)')}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            fill={isFlagged ? 'currentColor' : 'none'}
+            stroke="currentColor"
+          >
             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
             <line x1="4" y1="22" x2="4" y2="15"/>
           </svg>

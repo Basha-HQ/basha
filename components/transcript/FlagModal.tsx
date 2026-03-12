@@ -15,6 +15,7 @@ interface Props {
 }
 
 export function FlagModal({ segment, onClose }: Props) {
+  const [correction, setCorrection] = useState('');
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -23,18 +24,23 @@ export function FlagModal({ segment, onClose }: Props) {
     e.preventDefault();
     setLoading(true);
 
-    await fetch(`/api/transcripts/${segment.id}/flag`, {
+    const res = await fetch(`/api/transcripts/${segment.id}/flag`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         flaggedText: segment.original_text,
+        suggestedCorrection: correction,
         comment,
       }),
     });
 
     setLoading(false);
-    setDone(true);
-    setTimeout(onClose, 1500);
+
+    // 409 means already flagged — treat as success from UX perspective
+    if (res.ok || res.status === 409) {
+      setDone(true);
+      setTimeout(onClose, 1500);
+    }
   }
 
   return (
@@ -43,7 +49,7 @@ export function FlagModal({ segment, onClose }: Props) {
         <div className="px-6 py-5 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900">Flag transcript issue</h2>
           <p className="text-sm text-gray-400 mt-1">
-            Help us improve by reporting incorrect transcriptions
+            Help us improve — tell us what the correct transcription should be
           </p>
         </div>
 
@@ -64,13 +70,27 @@ export function FlagModal({ segment, onClose }: Props) {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  What&apos;s wrong? (optional)
+                  What should it say?
+                </label>
+                <input
+                  type="text"
+                  value={correction}
+                  onChange={(e) => setCorrection(e.target.value)}
+                  placeholder="e.g. pannalam"
+                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Additional context{' '}
+                  <span className="font-normal text-gray-400">(optional)</span>
                 </label>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="e.g. 'pannalam' was transcribed as 'panalam'"
-                  rows={3}
+                  placeholder="e.g. this word appears twice in the meeting"
+                  rows={2}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 />
               </div>
