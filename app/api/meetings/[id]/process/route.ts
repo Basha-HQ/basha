@@ -108,7 +108,7 @@ export async function POST(
       [JSON.stringify(summary), id]
     );
 
-    return NextResponse.json({ success: true, segmentsProcessed: segments.length });
+    return NextResponse.json({ success: true, segmentsProcessed: englishSegments.length });
   } catch (err) {
     console.error('Processing error:', err);
     await query("UPDATE meetings SET status = 'failed' WHERE id = $1", [id]);
