@@ -58,30 +58,42 @@ export const authConfig: NextAuthConfig = {
     async signIn({ user, account }) {
       // For Google sign-in, upsert user in our DB
       if (account?.provider === 'google' && user.email) {
-        const existing = await queryOne<DbUser>(
-          'SELECT id FROM users WHERE email = $1',
-          [user.email]
-        );
-        if (!existing) {
-          await queryOne(
-            'INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id',
-            [user.email, user.name]
+        // Critical: ensure user exists in DB — block sign-in if this fails
+        try {
+          const existing = await queryOne<DbUser>(
+            'SELECT id FROM users WHERE email = $1',
+            [user.email]
           );
+          if (!existing) {
+            await queryOne(
+              'INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id',
+              [user.email, user.name]
+            );
+          }
+        } catch (err) {
+          console.error('[Auth] signIn DB error (user upsert):', err);
+          return false;
         }
-        // Store Google OAuth tokens for Calendar access
+
+        // Non-critical: store Google OAuth tokens for Calendar access
         if (account.access_token) {
-          const expiry = account.expires_at
-            ? new Date(account.expires_at * 1000).toISOString()
-            : new Date(Date.now() + 3600 * 1000).toISOString();
-          await queryOne(
-            `UPDATE users SET
-               google_access_token = $1,
-               google_refresh_token = COALESCE($2, google_refresh_token),
-               google_token_expiry = $3,
-               google_calendar_connected = true
-             WHERE email = $4`,
-            [account.access_token, account.refresh_token ?? null, expiry, user.email]
-          );
+          try {
+            const expiry = account.expires_at
+              ? new Date(account.expires_at * 1000).toISOString()
+              : new Date(Date.now() + 3600 * 1000).toISOString();
+            await queryOne(
+              `UPDATE users SET
+                 google_access_token = $1,
+                 google_refresh_token = COALESCE($2, google_refresh_token),
+                 google_token_expiry = $3,
+                 google_calendar_connected = true
+               WHERE email = $4`,
+              [account.access_token, account.refresh_token ?? null, expiry, user.email]
+            );
+          } catch (err) {
+            console.error('[Auth] signIn DB error (calendar token store):', err);
+            // do not return false — user can still sign in without Calendar
+          }
         }
       }
       return true;
@@ -91,7 +103,7 @@ export const authConfig: NextAuthConfig = {
       if (user || trigger === 'update') {
         const dbUser = await queryOne<DbUser>(
           'SELECT id, plan_type, onboarding_completed, google_calendar_connected FROM users WHERE email = $1',
-          [token.email]
+          [user?.email ?? token.email]
         );
         if (dbUser) {
           token.userId = dbUser.id;
