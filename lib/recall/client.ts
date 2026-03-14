@@ -42,8 +42,8 @@ function getBase() {
 }
 
 function getHeaders() {
-  const key = process.env.RECALL_API_KEY;
-  if (!key) throw new Error('RECALL_API_KEY is not set');
+  const key = process.env.RECALL_AI_API_KEY;
+  if (!key) throw new Error('RECALL_AI_API_KEY is not set');
   return {
     Authorization: `Token ${key}`,
     'Content-Type': 'application/json',

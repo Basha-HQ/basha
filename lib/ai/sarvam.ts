@@ -248,8 +248,8 @@ export async function transcribeAudio(
   audioBuffer: Buffer,
   fileName: string
 ): Promise<SarvamSTTResponse> {
-  const apiKey = process.env.SARVAM_API_KEY;
-  if (!apiKey) throw new Error('SARVAM_API_KEY is not set');
+  const apiKey = process.env.SARVAM_AI_API_KEY;
+  if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
   const ext = fileName.split('.').pop()?.toLowerCase();
   // Compressed formats (mp4/webm) can be >30s even at small file sizes — always use batch
@@ -270,8 +270,8 @@ export async function translateToEnglish(
   text: string,
   sourceLanguage: string = 'auto'
 ): Promise<string> {
-  const apiKey = process.env.SARVAM_API_KEY;
-  if (!apiKey) throw new Error('SARVAM_API_KEY is not set');
+  const apiKey = process.env.SARVAM_AI_API_KEY;
+  if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
   const languageMap: Record<string, string> = {
     ta: 'ta-IN',

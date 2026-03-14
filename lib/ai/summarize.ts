@@ -51,8 +51,8 @@ Be concise. The overview must be 1–2 sentences. If a section has no content, u
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://linguameet.app',
-      'X-Title': 'LinguaMeet',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://trybasha.in',
+      'X-Title': 'Basha',
     },
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
@@ -112,8 +112,8 @@ Respond with only the title, nothing else.`;
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://linguameet.app',
-        'X-Title': 'LinguaMeet',
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'https://trybasha.in',
+        'X-Title': 'Basha',
       },
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
