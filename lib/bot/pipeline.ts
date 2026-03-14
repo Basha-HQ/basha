@@ -12,8 +12,6 @@ import { query, queryOne } from '@/lib/db';
 import { getRecordingUrl, type RecallBot } from '@/lib/recall/client';
 import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
-import path from 'path';
-import fs from 'fs';
 
 export interface BotRow {
   id: string;
@@ -55,17 +53,11 @@ export async function handleRecordingReady(
     const audioArrayBuffer = await audioRes.arrayBuffer();
     const audioBuffer = Buffer.from(audioArrayBuffer);
 
-    // 3. Save audio locally
-    const uploadDir = process.env.UPLOAD_DIR ?? './public/uploads';
-    const dir = path.join(process.cwd(), uploadDir, userId);
-    fs.mkdirSync(dir, { recursive: true });
+    // 3. Store Recall download URL as audio_path (no local disk write needed)
     const ext = downloadUrl.includes('.mp4') ? 'mp4' : 'webm';
-    const audioPath = path.join(dir, `${bot.meeting_id}.${ext}`);
-    fs.writeFileSync(audioPath, audioBuffer);
-
     await query(
       `UPDATE meetings SET audio_path = $1 WHERE id = $2`,
-      [`/uploads/${userId}/${bot.meeting_id}.${ext}`, bot.meeting_id]
+      [downloadUrl, bot.meeting_id]
     );
 
     // 4. Transcribe with Sarvam AI
@@ -73,7 +65,7 @@ export async function handleRecordingReady(
       'SELECT title FROM meetings WHERE id = $1',
       [bot.meeting_id]
     );
-    const fileName = path.basename(audioPath);
+    const fileName = `${bot.meeting_id}.${ext}`;
     const sttResult = await transcribeAudio(audioBuffer, fileName);
 
     // Log first diarized entry so we can verify Sarvam's actual field names

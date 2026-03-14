@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/config';
 import { query, queryOne } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
 // POST /api/meetings/[id]/audio — upload audio file for a meeting
 export async function POST(
@@ -48,8 +49,8 @@ export async function POST(
     return NextResponse.json({ error: 'File too large. Max 200MB' }, { status: 400 });
   }
 
-  // Save file to disk
-  const uploadDir = path.join(process.cwd(), 'public', 'uploads', session.user.id);
+  // Save file to writable tmp dir (works on Vercel serverless)
+  const uploadDir = path.join(os.tmpdir(), 'linguameet', session.user.id);
   await mkdir(uploadDir, { recursive: true });
 
   const ext = file.name.split('.').pop() ?? 'wav';
@@ -59,7 +60,8 @@ export async function POST(
   const bytes = await file.arrayBuffer();
   await writeFile(filePath, Buffer.from(bytes));
 
-  const relativeAudioPath = `/uploads/${session.user.id}/${fileName}`;
+  // Store absolute path so process route can read it regardless of cwd
+  const relativeAudioPath = filePath;
 
   // Update meeting with audio path and set to processing
   await query(

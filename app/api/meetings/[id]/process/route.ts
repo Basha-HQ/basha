@@ -47,10 +47,22 @@ export async function POST(
   await query("UPDATE meetings SET status = 'processing' WHERE id = $1", [id]);
 
   try {
-    // Step 1: Read audio file
-    const audioFilePath = path.join(process.cwd(), 'public', meeting.audio_path);
-    const audioBuffer = await readFile(audioFilePath);
-    const fileName = path.basename(audioFilePath);
+    // Step 1: Read audio file (supports absolute paths, URLs, and legacy relative paths)
+    let audioBuffer: Buffer;
+    let fileName: string;
+    if (meeting.audio_path.startsWith('http')) {
+      const res = await fetch(meeting.audio_path);
+      if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
+      audioBuffer = Buffer.from(await res.arrayBuffer());
+      fileName = path.basename(new URL(meeting.audio_path).pathname) || 'audio.wav';
+    } else if (path.isAbsolute(meeting.audio_path)) {
+      audioBuffer = await readFile(meeting.audio_path);
+      fileName = path.basename(meeting.audio_path);
+    } else {
+      const audioFilePath = path.join(process.cwd(), 'public', meeting.audio_path);
+      audioBuffer = await readFile(audioFilePath);
+      fileName = path.basename(audioFilePath);
+    }
 
     // Step 2: Transcribe with Sarvam AI
     const sttResult = await transcribeAudio(audioBuffer, fileName);
