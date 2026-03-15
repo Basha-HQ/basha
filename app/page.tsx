@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { DemoTranscriptTabs } from '@/components/landing/DemoTranscriptTabs';
 import { RotatingWord } from '@/components/landing/RotatingWord';
+import { FadeIn } from '@/components/ui/FadeIn';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
 
@@ -365,85 +366,94 @@ export default function LandingPage() {
         style={{ backgroundColor: '#0a0a1f' }}
       >
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-14">
-            <div
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
-              style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}
-            >
-              ★ No competitor offers this
+          <FadeIn>
+            <div className="text-center mb-14">
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
+                style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}
+              >
+                ★ No competitor offers this
+              </div>
+              <h2
+                className="font-bold leading-tight mb-4"
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
+              >
+                See it before you believe it.
+              </h2>
+              <p className="text-lg max-w-xl mx-auto" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                Real code-mixed Indian meetings. Real Basha output. Choose your dialect.
+              </p>
             </div>
-            <h2
-              className="font-bold leading-tight mb-4"
-              style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
-            >
-              See it before you believe it.
-            </h2>
-            <p className="text-lg max-w-xl mx-auto" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Real code-mixed Indian meetings. Real Basha output. Choose your dialect.
-            </p>
-          </div>
+          </FadeIn>
 
-          <DemoTranscriptTabs />
+          <FadeIn delay={150}>
+            <DemoTranscriptTabs />
+          </FadeIn>
         </div>
       </section>
 
       {/* ── Indian Meeting Reality ─────────────────────────────────────────── */}
       <section className="px-6 py-24 bg-white">
         <div className="max-w-6xl mx-auto">
-          <div className="max-w-2xl mb-16">
-            <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">The Reality</p>
-            <h2
-              className="font-bold leading-tight"
-              style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
-            >
-              Every meeting tool was built for English.
-              <br />
-              <span className="text-gray-400">India doesn't work that way.</span>
-            </h2>
-          </div>
+          <FadeIn>
+            <div className="max-w-2xl mb-16">
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">The Reality</p>
+              <h2
+                className="font-bold leading-tight"
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+              >
+                Every meeting tool was built for English.
+                <br />
+                <span className="text-gray-400">India doesn't work that way.</span>
+              </h2>
+            </div>
+          </FadeIn>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {realities.map((r) => (
-              <div
-                key={r.n}
-                className="relative p-7 rounded-2xl overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-                style={{ background: '#f8f8fc', border: '1px solid #e8e8f0' }}
-              >
+            {realities.map((r, i) => (
+              <FadeIn key={r.n} delay={i * 80}>
                 <div
-                  className="absolute top-4 right-5 font-black text-6xl leading-none select-none"
-                  style={{ color: '#e8e8f0', fontVariantNumeric: 'tabular-nums' }}
+                  className="relative p-7 rounded-2xl overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-lg h-full"
+                  style={{ background: '#f8f8fc', border: '1px solid #e8e8f0' }}
                 >
-                  {r.n}
+                  <div
+                    className="absolute top-4 right-5 font-black text-6xl leading-none select-none"
+                    style={{ color: '#e8e8f0', fontVariantNumeric: 'tabular-nums' }}
+                  >
+                    {r.n}
+                  </div>
+                  <h3 className="font-bold text-base leading-snug mb-3 pr-8 relative" style={{ color: '#07071a' }}>
+                    {r.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed relative" style={{ color: '#6b7280' }}>
+                    {r.body}
+                  </p>
                 </div>
-                <h3 className="font-bold text-base leading-snug mb-3 pr-8 relative" style={{ color: '#07071a' }}>
-                  {r.title}
-                </h3>
-                <p className="text-sm leading-relaxed relative" style={{ color: '#6b7280' }}>
-                  {r.body}
-                </p>
-              </div>
+              </FadeIn>
             ))}
 
             {/* Promise card */}
-            <div
-              className="relative p-7 rounded-2xl overflow-hidden md:col-span-2 lg:col-span-1 flex flex-col justify-between"
-              style={{ backgroundColor: '#07071a' }}
-            >
-              <div>
-                <div
-                  className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-5"
-                  style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
-                >
-                  The Basha Promise
+            <FadeIn delay={realities.length * 80}>
+              <div
+                className="relative p-7 rounded-2xl overflow-hidden md:col-span-2 lg:col-span-1 flex flex-col justify-between h-full"
+                style={{ backgroundColor: '#07071a' }}
+              >
+                <div>
+                  <div
+                    className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-5"
+                    style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
+                  >
+                    The Basha Promise
+                  </div>
+                  <p className="font-semibold text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                    Basha bridges language gaps in Indian meetings without disrupting them — bringing every participant to the same table, documented in English, without asking anyone to communicate as someone they are not.
+                  </p>
                 </div>
-                <p className="font-semibold text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                  Basha bridges language gaps in Indian meetings without disrupting them — bringing every participant to the same table, documented in English, without asking anyone to communicate as someone they are not.
-                </p>
+                <div className="mt-8 text-sm font-bold" style={{ color: '#f59e0b' }}>
+                  Basha — Built for India. Built for how India speaks.
+                </div>
               </div>
-              <div className="mt-8 text-sm font-bold" style={{ color: '#f59e0b' }}>
-                Basha — Built for India. Built for how India speaks.
-              </div>
-            </div>
+            </FadeIn>
           </div>
         </div>
       </section>
@@ -451,61 +461,66 @@ export default function LandingPage() {
       {/* ── 5 USP Layers ──────────────────────────────────────────────────── */}
       <section className="px-6 py-24" style={{ background: '#f4f4f8' }}>
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">What makes Basha different</p>
-            <h2
-              className="font-bold leading-tight"
-              style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
-            >
-              Five structural advantages
-              <br />
-              <span className="text-gray-400">no competitor can replicate.</span>
-            </h2>
-          </div>
+          <FadeIn>
+            <div className="text-center mb-16">
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">What makes Basha different</p>
+              <h2
+                className="font-bold leading-tight"
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+              >
+                Five structural advantages
+                <br />
+                <span className="text-gray-400">no competitor can replicate.</span>
+              </h2>
+            </div>
+          </FadeIn>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {usps.map((usp, i) => (
-              <div
-                key={i}
-                className="p-7 rounded-2xl bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-                style={{ border: '1px solid #e5e5f0' }}
-              >
+              <FadeIn key={i} delay={i * 80}>
                 <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
-                  style={{ background: '#f0f0ff', color: '#4f46e5' }}
+                  className="p-7 rounded-2xl bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-lg h-full"
+                  style={{ border: '1px solid #e5e5f0' }}
                 >
-                  {usp.icon}
+                  <div
+                    className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
+                    style={{ background: '#f0f0ff', color: '#4f46e5' }}
+                  >
+                    {usp.icon}
+                  </div>
+                  <span
+                    className="text-xs font-bold uppercase tracking-widest mb-3 inline-block"
+                    style={{ color: '#f59e0b' }}
+                  >
+                    {usp.tag}
+                  </span>
+                  <h3 className="font-bold text-base leading-snug mb-3" style={{ color: '#07071a' }}>
+                    {usp.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed" style={{ color: '#6b7280' }}>
+                    {usp.body}
+                  </p>
                 </div>
-                <span
-                  className="text-xs font-bold uppercase tracking-widest mb-3 inline-block"
-                  style={{ color: '#f59e0b' }}
-                >
-                  {usp.tag}
-                </span>
-                <h3 className="font-bold text-base leading-snug mb-3" style={{ color: '#07071a' }}>
-                  {usp.title}
-                </h3>
-                <p className="text-sm leading-relaxed" style={{ color: '#6b7280' }}>
-                  {usp.body}
-                </p>
-              </div>
+              </FadeIn>
             ))}
 
             {/* Extra stat card */}
-            <div
-              className="p-7 rounded-2xl flex flex-col justify-between"
-              style={{ background: 'linear-gradient(135deg, #07071a 0%, #1e1b4b 100%)', border: '1px solid #2d2a5e' }}
-            >
-              <div>
-                <div className="text-5xl font-black mb-3" style={{ color: '#f59e0b' }}>67M+</div>
-                <p className="text-white/70 text-sm leading-relaxed">
-                  Indian knowledge workers running daily video meetings in code-mixed speech — with no tool built for them.
-                </p>
+            <FadeIn delay={usps.length * 80}>
+              <div
+                className="p-7 rounded-2xl flex flex-col justify-between h-full"
+                style={{ background: 'linear-gradient(135deg, #07071a 0%, #1e1b4b 100%)', border: '1px solid #2d2a5e' }}
+              >
+                <div>
+                  <div className="text-5xl font-black mb-3" style={{ color: '#f59e0b' }}>67M+</div>
+                  <p className="text-white/70 text-sm leading-relaxed">
+                    Indian knowledge workers running daily video meetings in code-mixed speech — with no tool built for them.
+                  </p>
+                </div>
+                <div className="mt-6 text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(245,158,11,0.7)' }}>
+                  An untapped market
+                </div>
               </div>
-              <div className="mt-6 text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(245,158,11,0.7)' }}>
-                An untapped market
-              </div>
-            </div>
+            </FadeIn>
           </div>
         </div>
       </section>
@@ -513,17 +528,19 @@ export default function LandingPage() {
       {/* ── How It Works ──────────────────────────────────────────────────── */}
       <section className="px-6 py-24 bg-white">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">How it works</p>
-            <h2
-              className="font-bold leading-tight"
-              style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
-            >
-              From meeting link to dual transcript
-              <br />
-              <span className="text-gray-400">in three steps.</span>
-            </h2>
-          </div>
+          <FadeIn>
+            <div className="text-center mb-16">
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">How it works</p>
+              <h2
+                className="font-bold leading-tight"
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+              >
+                From meeting link to dual transcript
+                <br />
+                <span className="text-gray-400">in three steps.</span>
+              </h2>
+            </div>
+          </FadeIn>
 
           <div className="relative flex flex-col md:flex-row gap-8 md:gap-0">
             {/* Connector line */}
@@ -533,16 +550,18 @@ export default function LandingPage() {
             />
 
             {steps.map((step, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center text-center px-6 relative">
-                <div
-                  className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-black mb-6 relative z-10"
-                  style={{ background: '#07071a', color: '#f59e0b', boxShadow: '0 0 0 6px #ffffff' }}
-                >
-                  {step.n}
+              <FadeIn key={i} delay={i * 120} className="flex-1">
+                <div className="flex flex-col items-center text-center px-6 relative">
+                  <div
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-black mb-6 relative z-10"
+                    style={{ background: '#07071a', color: '#f59e0b', boxShadow: '0 0 0 6px #ffffff' }}
+                  >
+                    {step.n}
+                  </div>
+                  <h3 className="font-bold text-lg mb-3" style={{ color: '#07071a' }}>{step.title}</h3>
+                  <p className="text-sm leading-relaxed" style={{ color: '#6b7280' }}>{step.body}</p>
                 </div>
-                <h3 className="font-bold text-lg mb-3" style={{ color: '#07071a' }}>{step.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: '#6b7280' }}>{step.body}</p>
-              </div>
+              </FadeIn>
             ))}
           </div>
         </div>
@@ -551,16 +570,19 @@ export default function LandingPage() {
       {/* ── Comparison Table ──────────────────────────────────────────────── */}
       <section className="px-6 py-24" style={{ background: '#f4f4f8' }}>
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-14">
-            <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">Competitive landscape</p>
-            <h2
-              className="font-bold leading-tight"
-              style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
-            >
-              Why Indian teams switch to Basha.
-            </h2>
-          </div>
+          <FadeIn>
+            <div className="text-center mb-14">
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">Competitive landscape</p>
+              <h2
+                className="font-bold leading-tight"
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+              >
+                Why Indian teams switch to Basha.
+              </h2>
+            </div>
+          </FadeIn>
 
+          <FadeIn delay={100}>
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e5e5f0' }}>
             {/* Header */}
             <div className="grid grid-cols-3 bg-white border-b" style={{ borderColor: '#e5e5f0' }}>
@@ -608,6 +630,8 @@ export default function LandingPage() {
             ))}
           </div>
 
+          </FadeIn>
+
           <p className="text-center mt-5 text-sm" style={{ color: '#9ca3af' }}>
             Any competitor replicating Basha's core advantage must rebuild their entire speech pipeline for India. That is not a product sprint — it is a multi-year investment.
           </p>
@@ -617,23 +641,25 @@ export default function LandingPage() {
       {/* ── Testimonials ──────────────────────────────────────────────────── */}
       <section className="px-6 py-24 bg-white">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-14">
-            <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">From Indian teams</p>
-            <h2
-              className="font-bold leading-tight"
-              style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
-            >
-              What it feels like when a tool
-              <br />
-              <span className="text-gray-400">finally understands you.</span>
-            </h2>
-          </div>
+          <FadeIn>
+            <div className="text-center mb-14">
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">From Indian teams</p>
+              <h2
+                className="font-bold leading-tight"
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+              >
+                What it feels like when a tool
+                <br />
+                <span className="text-gray-400">finally understands you.</span>
+              </h2>
+            </div>
+          </FadeIn>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map((t, i) => (
+              <FadeIn key={i} delay={i * 100}>
               <div
-                key={i}
-                className="p-7 rounded-2xl flex flex-col gap-6"
+                className="p-7 rounded-2xl flex flex-col gap-6 h-full"
                 style={{ background: '#f8f8fc', border: '1px solid #e8e8f0' }}
               >
                 <div className="flex gap-1">
@@ -659,6 +685,7 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
+              </FadeIn>
             ))}
           </div>
         </div>
@@ -672,34 +699,36 @@ export default function LandingPage() {
           backgroundImage: 'radial-gradient(ellipse 70% 60% at 50% 100%, rgba(99,102,241,0.18) 0%, transparent 70%)',
         }}
       >
-        <div className="max-w-3xl mx-auto">
-          <h2
-            className="font-black leading-tight mb-5"
-            style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: '#ffffff' }}
-          >
-            One meeting.
-            <br />
-            One transcript.
-            <br />
-            <span style={{ color: '#f59e0b' }}>Zero language gaps.</span>
-          </h2>
-          <p className="text-lg mb-10" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Join Indian teams who speak naturally and document clearly.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:scale-105 hover:brightness-110 btn-amber-shimmer"
-            style={{ color: '#07071a' }}
-          >
-            Get started free
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
-          <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            No credit card required · Works with Google Meet & Zoom
-          </p>
-        </div>
+        <FadeIn>
+          <div className="max-w-3xl mx-auto">
+            <h2
+              className="font-black leading-tight mb-5"
+              style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: '#ffffff' }}
+            >
+              One meeting.
+              <br />
+              One transcript.
+              <br />
+              <span style={{ color: '#f59e0b' }}>Zero language gaps.</span>
+            </h2>
+            <p className="text-lg mb-10" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Join Indian teams who speak naturally and document clearly.
+            </p>
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:scale-105 hover:brightness-110 btn-amber-shimmer"
+              style={{ color: '#07071a' }}
+            >
+              Get started free
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+            <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              No credit card required · Works with Google Meet & Zoom
+            </p>
+          </div>
+        </FadeIn>
       </section>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
