@@ -146,6 +146,7 @@ async function transcribeAudioBatch(
     inputs: Array<{ file_name: string; file_id: string }>;
     outputs: Array<{ file_name: string; file_id: string }>;
     state: string;
+    error_message?: string;
   };
   type StatusResponse = {
     job_state: string;
