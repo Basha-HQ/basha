@@ -150,6 +150,8 @@ async function transcribeAudioBatch(
   type StatusResponse = {
     job_state: string;
     job_details?: JobDetail[];
+    failed_files_count?: number;
+    total_files?: number;
   };
   let completedStatus: StatusResponse | null = null;
   const pollDeadline = Date.now() + 10 * 60 * 1000;
