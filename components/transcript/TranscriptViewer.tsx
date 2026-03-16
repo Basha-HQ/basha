@@ -19,6 +19,8 @@ interface Props {
   transcripts: TranscriptRow[];
   meetingTitle: string;
   audioPath?: string;
+  /** Duration in seconds from the DB — used to compute estimated timestamps before audio loads */
+  knownDuration?: number;
   flaggedSegmentIds?: string[];
 }
 
@@ -45,12 +47,13 @@ function speakerLabel(speaker: string): string {
   return speaker;
 }
 
-export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath, flaggedSegmentIds }: Props) {
+export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath, knownDuration, flaggedSegmentIds }: Props) {
   const [search, setSearch] = useState('');
   const [flagTarget, setFlagTarget] = useState<TranscriptRow | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1);
-  const [audioDuration, setAudioDuration] = useState(0);
+  // Pre-seed with DB duration so estimated timestamps work before audio loads
+  const [audioDuration, setAudioDuration] = useState(knownDuration ?? 0);
 
   const segmentRefs = useRef<Array<HTMLDivElement | null>>([]);
   const seekAudioRef = useRef<((s: number) => void) | null>(null);
@@ -200,6 +203,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
             onActiveSegmentChange={setActiveSegmentIndex}
             onRegisterSeek={handleRegisterSeek}
             onDurationLoad={setAudioDuration}
+            knownDuration={knownDuration}
           />
         )}
 

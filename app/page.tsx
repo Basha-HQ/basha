@@ -106,23 +106,24 @@ const usps = [
 const steps = [
   {
     n: '1',
-    title: 'Invite Basha',
-    body: 'Paste your Google Meet or Zoom link. Basha joins as a bot — no app install, no friction.',
+    title: 'Install Basha for Chrome',
+    body: 'One click from the Chrome Web Store. Works with Google Meet, Zoom, and Teams. No account needed yet.',
   },
   {
     n: '2',
-    title: 'Basha listens',
-    body: 'Captures every word, every language, every mid-sentence code-switch. Nothing is lost.',
+    title: 'Record your meeting tab',
+    body: 'Click the Basha icon in Chrome when the meeting starts. Nothing joins your call — completely invisible to other attendees.',
   },
   {
     n: '3',
-    title: 'Get dual transcript',
-    body: 'Receive the original code-mixed transcript alongside a clean English version — instantly.',
+    title: 'Get dual transcripts',
+    body: 'Basha captures every code-switch: Hinglish, Tanglish, Teluglish. Get the original preserved + a clean English version to share.',
   },
 ];
 
 const comparison = [
   { capability: 'English meeting support', basha: true, others: true },
+  { capability: 'Records without a bot joining the call', basha: true, others: false },
   { capability: 'Hindi / Tamil / Telugu support', basha: true, others: false },
   { capability: 'Code-mixed speech (Hinglish, Tanglish…)', basha: true, others: false },
   { capability: 'Dual output: original + English', basha: true, others: false },
@@ -249,8 +250,9 @@ export default function LandingPage() {
             className="text-lg md:text-xl leading-relaxed mb-10 max-w-2xl mx-auto"
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
-            Basha captures code-mixed Indian meetings — Hinglish, Tanglish, Teluglish — and delivers
-            two transcripts: the original, preserved in full, and a clean English version ready to share.
+            Records your tab audio silently — no bots, no invites, no attendee list entries.
+            Speak naturally in Hinglish, Tanglish, or Tamil. Get two transcripts: the original
+            preserved in full, and a clean English version ready to share.
           </p>
 
           {/* CTAs */}
@@ -535,9 +537,9 @@ export default function LandingPage() {
                 className="font-bold leading-tight"
                 style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
               >
-                From meeting link to dual transcript
+                From install to dual transcript
                 <br />
-                <span className="text-gray-400">in three steps.</span>
+                <span className="text-gray-400">in three steps. No bots.</span>
               </h2>
             </div>
           </FadeIn>
@@ -725,7 +727,7 @@ export default function LandingPage() {
               </svg>
             </Link>
             <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              No credit card required · Works with Google Meet & Zoom
+              No credit card required · No bot joining your meeting · Chrome extension
             </p>
           </div>
         </FadeIn>

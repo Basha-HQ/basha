@@ -172,27 +172,50 @@ async function transcribeAudioBatch(
   }
   if (!completedStatus) throw new Error('Sarvam batch job timed out');
 
-  // Extract output file name from job_details (e.g. "0.json")
+  // Log the full status so we can debug output file name issues
+  console.log('[sarvam] Batch job completed. Full status:', JSON.stringify(completedStatus, null, 2));
+
+  // Check if the job actually succeeded — Sarvam reports "Completed" even when all files failed
+  const jobDetail = completedStatus.job_details?.[0];
+  if (jobDetail?.state === 'API Error' || completedStatus.failed_files_count === completedStatus.total_files) {
+    const detailMsg = jobDetail?.error_message || 'Unknown batch processing error';
+    throw new Error(`Sarvam batch STT failed: ${detailMsg}`);
+  }
+
+  // Extract output file name from job_details
+  // Sarvam may return outputs in job_details or the output may use the input file name
   const outputFileName = completedStatus.job_details?.[0]?.outputs?.[0]?.file_name;
-  if (!outputFileName) throw new Error('No output file name in Sarvam batch status');
 
   // Step 6: Get download URL for the output file
-  const downloadRes = await fetch(`${BATCH_STT_BASE}/download-files`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ job_id, files: [outputFileName] }),
-  });
-  if (!downloadRes.ok) {
-    const e = await downloadRes.text();
-    throw new Error(`Sarvam batch download-files failed: ${downloadRes.status} ${e}`);
-  }
-  const downloadData = (await downloadRes.json()) as {
-    download_urls: Record<string, { file_url: string }>;
-  };
+  // Try multiple candidate file names — Sarvam's API is inconsistent about naming
+  const candidateFiles = [
+    outputFileName,
+    fileName.replace(/\.[^.]+$/, '.json'),  // e.g. "uuid.webm" → "uuid.json"
+    fileName,                                // original file name
+    '0.json',                                // fallback index-based name
+  ].filter((f): f is string => !!f);
 
-  const resultUrl =
-    downloadData.download_urls[outputFileName]?.file_url ??
-    Object.values(downloadData.download_urls)[0]?.file_url;
+  let downloadData: { download_urls: Record<string, { file_url: string }> } | null = null;
+
+  for (const candidate of candidateFiles) {
+    const downloadRes = await fetch(`${BATCH_STT_BASE}/download-files`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ job_id, files: [candidate] }),
+    });
+    if (downloadRes.ok) {
+      downloadData = await downloadRes.json();
+      console.log(`[sarvam] Download succeeded with file name: "${candidate}"`);
+      break;
+    }
+    console.log(`[sarvam] Download attempt with "${candidate}" failed: ${downloadRes.status}`);
+  }
+
+  if (!downloadData) {
+    throw new Error(`Sarvam batch download-files failed for all candidates: ${candidateFiles.join(', ')}`);
+  }
+
+  const resultUrl = Object.values(downloadData.download_urls)[0]?.file_url;
   if (!resultUrl) throw new Error('No download URL returned by Sarvam batch API');
 
   const resultRes = await fetch(resultUrl);
@@ -241,8 +264,10 @@ async function transcribeAudioBatch(
 
 /**
  * Transcribe audio using Sarvam AI.
- * Uses batch API for compressed formats (mp4/webm) since duration can't be reliably
- * inferred from file size. Falls back to sync for short WAV files (≤500 KB).
+ * Strategy: always try sync API first (handles WebM/Opus natively via multipart).
+ * If sync fails with a duration/size error (>30s limit), fall back to batch API.
+ * The batch API uploads to Azure Blob Storage which may not support all formats,
+ * so sync is preferred.
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
@@ -251,16 +276,20 @@ export async function transcribeAudio(
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  // Compressed formats (mp4/webm) can be >30s even at small file sizes — always use batch
-  const alwaysBatch = ext === 'mp4' || ext === 'webm';
-  // For WAV: 500 KB ≈ ~15s of mono 16kHz PCM — safe threshold for sync
-  const WAV_SYNC_LIMIT = 500_000;
-
-  if (alwaysBatch || audioBuffer.byteLength > WAV_SYNC_LIMIT) {
-    return transcribeAudioBatch(apiKey, audioBuffer, fileName);
+  // Try sync API first — it handles WebM/Opus natively via multipart upload
+  try {
+    console.log(`[sarvam] Trying sync STT for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB)`);
+    return await transcribeAudioSync(apiKey, audioBuffer, fileName);
+  } catch (syncErr) {
+    const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+    // If sync fails due to duration limit, fall back to batch
+    if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size')) {
+      console.log(`[sarvam] Sync STT rejected (likely >30s), falling back to batch: ${msg}`);
+      return transcribeAudioBatch(apiKey, audioBuffer, fileName);
+    }
+    // Any other sync error — re-throw
+    throw syncErr;
   }
-  return transcribeAudioSync(apiKey, audioBuffer, fileName);
 }
 
 /**

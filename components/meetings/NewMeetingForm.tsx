@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { BotStatusCard } from './BotStatusCard';
+import ExtensionInstallBanner from './ExtensionInstallBanner';
+import ExtensionStatusCard from './ExtensionStatusCard';
 
 const LANGUAGE_OPTIONS = [
   { value: 'auto', label: 'Auto' },
@@ -13,8 +14,8 @@ const LANGUAGE_OPTIONS = [
   { value: 'en-IN', label: 'English' },
 ];
 
-type Mode = 'form' | 'uploading' | 'processing' | 'bot';
-type Tab = 'bot' | 'upload';
+type Tab = 'extension' | 'bot';
+type Mode = 'form' | 'bot-status' | 'extension-status';
 
 function RocketIcon() {
   return (
@@ -23,16 +24,6 @@ function RocketIcon() {
       <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
       <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
       <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-    </svg>
-  );
-}
-
-function UploadIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
   );
 }
@@ -89,18 +80,51 @@ function generateDefaultTitle(meetingUrl: string): string {
   return `${platform} · ${dateStr}, ${timeStr}`;
 }
 
+/** True if the Basha extension is installed in this browser */
+function useExtensionDetected() {
+  const [detected, setDetected] = useState<boolean | null>(null);
+  useEffect(() => {
+    let resolved = false;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'BASHA_PONG' && !resolved) {
+        resolved = true;
+        setDetected(true);
+      }
+    };
+    window.addEventListener('message', handler);
+    window.postMessage({ type: 'BASHA_PING' }, '*');
+    const t = setTimeout(() => { if (!resolved) setDetected(false); }, 700);
+    return () => { window.removeEventListener('message', handler); clearTimeout(t); };
+  }, []);
+  return detected;
+}
+
 export function NewMeetingForm() {
-  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<Tab>('extension');
   const [mode, setMode] = useState<Mode>('form');
-  const [activeTab, setActiveTab] = useState<Tab>('bot');
+
+  // Bot tab state
   const [meetingLink, setMeetingLink] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState('auto');
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
-  const [progress, setProgress] = useState('');
   const [botId, setBotId] = useState('');
   const [botMeetingId, setBotMeetingId] = useState('');
+
+  // Extension tab state
+  const [extensionMeetingId, setExtensionMeetingId] = useState('');
+  const extensionDetected = useExtensionDetected();
+
+  // Listen for the extension creating a session (extension sends meetingId via postMessage)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'BASHA_RECORDING_STARTED' && event.data.meetingId) {
+        setExtensionMeetingId(event.data.meetingId);
+        setMode('extension-status');
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   async function safeJson(res: Response): Promise<Record<string, string>> {
     try { return await res.json(); } catch { return {}; }
@@ -119,141 +143,149 @@ export function NewMeetingForm() {
       const data = await res.json();
       setBotId(data.botId);
       setBotMeetingId(data.meetingId);
-      setMode('bot');
+      setMode('bot-status');
     } catch (err) {
       setError(String(err));
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    if (!audioFile) { setError('Please upload an audio file'); return; }
-    setMode('uploading');
-    try {
-      setProgress('Creating meeting...');
-      const createRes = await fetch('/api/meetings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meetingLink: meetingLink || 'manual-upload', title: generateDefaultTitle(meetingLink || 'upload'), sourceLanguage }),
-      });
-      if (!createRes.ok) { const e = await safeJson(createRes); throw new Error(e.error ?? 'Failed to create meeting'); }
-      const { meeting } = await createRes.json();
-
-      setProgress('Uploading audio...');
-      const formData = new FormData();
-      formData.append('audio', audioFile);
-      const uploadRes = await fetch(`/api/meetings/${meeting.id}/audio`, { method: 'POST', body: formData });
-      if (!uploadRes.ok) { const e = await safeJson(uploadRes); throw new Error(e.error ?? 'Upload failed'); }
-
-      setMode('processing');
-      setProgress('Transcribing and translating… This may take a few minutes.');
-      const processRes = await fetch(`/api/meetings/${meeting.id}/process`, { method: 'POST' });
-      if (!processRes.ok) { const e = await safeJson(processRes); throw new Error(e.error ?? 'Processing failed'); }
-      router.push(`/meetings/${meeting.id}`);
-    } catch (err) {
-      setError(String(err));
-      setMode('form');
-    }
-  }
-
-  // Bot status view
-  if (mode === 'bot') return <BotStatusCard botId={botId} meetingId={botMeetingId} />;
-
-  // Processing state
-  if (mode === 'processing') {
+  // Render status cards when active
+  if (mode === 'bot-status') return <BotStatusCard botId={botId} meetingId={botMeetingId} />;
+  if (mode === 'extension-status') {
     return (
-      <div className="rounded-2xl p-14 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 animate-pulse" style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)' }}>
-          🧠
-        </div>
-        <h2 className="text-lg font-bold mb-2" style={{ color: 'rgba(255,255,255,0.85)' }}>Processing your meeting</h2>
-        <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.4)' }}>{progress}</p>
-        <div className="flex justify-center">
-          <div className="w-56 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <div className="h-full rounded-full animate-pulse w-3/4" style={{ background: 'linear-gradient(90deg, #6366f1, #f59e0b)' }} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Uploading state
-  if (mode === 'uploading') {
-    return (
-      <div className="rounded-2xl p-14 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-          ⬆️
-        </div>
-        <h2 className="text-lg font-bold mb-2" style={{ color: 'rgba(255,255,255,0.85)' }}>Uploading audio</h2>
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>{progress}</p>
-      </div>
+      <ExtensionStatusCard
+        meetingId={extensionMeetingId}
+        onCancel={() => { setMode('form'); setExtensionMeetingId(''); }}
+      />
     );
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <div>
+      {/* Tabs */}
+      <div className="flex rounded-xl overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('extension')}
+          className="flex-1 py-2.5 text-sm font-semibold transition-all"
+          style={activeTab === 'extension'
+            ? { background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', borderBottom: '2px solid #6366f1' }
+            : { color: 'rgba(255,255,255,0.35)', borderBottom: '2px solid transparent' }}
+        >
+          🎙 Record with Extension
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('bot')}
+          className="flex-1 py-2.5 text-sm font-semibold transition-all"
+          style={activeTab === 'bot'
+            ? { background: 'rgba(245,158,11,0.1)', color: '#fbbf24', borderBottom: '2px solid #f59e0b' }
+            : { color: 'rgba(255,255,255,0.35)', borderBottom: '2px solid transparent' }}
+        >
+          🤖 Use Bot <span className="text-xs font-normal opacity-60">(Backup)</span>
+        </button>
+      </div>
+
       <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        {/* Tabs */}
-        <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-          {([
-            { key: 'bot' as Tab, label: 'Live Meeting Bot', icon: <RocketIcon /> },
-            { key: 'upload' as Tab, label: 'Upload Audio', icon: <UploadIcon /> },
-          ]).map((tab) => {
-            const active = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className="flex-1 flex items-center justify-center gap-2 py-4 text-sm font-semibold transition-all"
-                style={{
-                  color: active ? '#f59e0b' : 'rgba(255,255,255,0.4)',
-                  background: active ? 'rgba(245,158,11,0.06)' : 'transparent',
-                  borderBottom: active ? '2px solid #f59e0b' : '2px solid transparent',
-                }}
-              >
-                <span>{tab.icon}</span>
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
         <div className="p-5 sm:p-6 space-y-5">
-          {/* Language pills */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Meeting language
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {LANGUAGE_OPTIONS.map((opt) => {
-                const active = sourceLanguage === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setSourceLanguage(opt.value)}
-                    className="px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all"
-                    style={{
-                      background: active ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.05)',
-                      color: active ? '#f59e0b' : 'rgba(255,255,255,0.45)',
-                      border: active ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              Helps transcribe code-mixed speech (Hinglish, Tanglish, etc.) accurately
-            </p>
-          </div>
 
-          {/* Bot tab */}
+          {/* ──────────────── EXTENSION TAB ──────────────── */}
+          {activeTab === 'extension' && (
+            <div className="space-y-5">
+              {/* Extension not yet detected / not installed */}
+              {extensionDetected === false && <ExtensionInstallBanner />}
+
+              {/* Extension detected — show ready state */}
+              {extensionDetected === true && (
+                <>
+                  {/* Language picker */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      Recording language
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {LANGUAGE_OPTIONS.map((opt) => {
+                        const active = sourceLanguage === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setSourceLanguage(opt.value)}
+                            className="px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all"
+                            style={{
+                              background: active ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.05)',
+                              color: active ? '#a5b4fc' : 'rgba(255,255,255,0.45)',
+                              border: active ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      Helps transcribe code-mixed speech (Hinglish, Tanglish, etc.) accurately
+                    </p>
+                  </div>
+
+                  {/* Instruction card */}
+                  <div className="px-4 py-3.5 rounded-xl text-sm leading-relaxed space-y-1" style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', color: 'rgba(255,255,255,0.55)' }}>
+                    <p className="font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                      How to record with the extension
+                    </p>
+                    <ol className="text-xs space-y-1 list-decimal list-inside" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      <li>Open your Google Meet, Zoom, or Teams tab</li>
+                      <li>Click the <strong style={{ color: 'rgba(255,255,255,0.65)' }}>Basha icon</strong> in your Chrome toolbar</li>
+                      <li>Select language and click <strong style={{ color: 'rgba(255,255,255,0.65)' }}>Start Recording</strong></li>
+                      <li>Click Stop when your meeting ends — transcript will appear here</li>
+                    </ol>
+                  </div>
+
+                  <div className="px-4 py-3 rounded-xl text-xs" style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.15)', color: 'rgba(52,211,153,0.8)' }}>
+                    ✓ Extension connected · No bot will join your call
+                  </div>
+                </>
+              )}
+
+              {/* Still checking */}
+              {extensionDetected === null && (
+                <div className="flex items-center justify-center h-20 text-slate-500 text-sm">
+                  Checking for Basha extension…
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ──────────────── BOT TAB ──────────────── */}
           {activeTab === 'bot' && (
             <div className="space-y-4">
+              {/* Language pills */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                  Meeting language
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {LANGUAGE_OPTIONS.map((opt) => {
+                    const active = sourceLanguage === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setSourceLanguage(opt.value)}
+                        className="px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all"
+                        style={{
+                          background: active ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.05)',
+                          color: active ? '#f59e0b' : 'rgba(255,255,255,0.45)',
+                          border: active ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <DarkInput
                 label="Meeting link"
                 id="meetingLink"
@@ -280,85 +312,14 @@ export function NewMeetingForm() {
                 Launch bot into meeting
               </button>
 
-              <div className="px-4 py-3 rounded-xl text-xs leading-relaxed" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', color: 'rgba(255,255,255,0.45)' }}>
-                A silent bot joins your call, records audio, and auto-generates a multilingual transcript when the meeting ends.
+              <div className="px-4 py-3 rounded-xl text-xs leading-relaxed" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.12)', color: 'rgba(255,255,255,0.35)' }}>
+                ⚠ A visible bot joins your call. Other participants will see it in the attendee list. Use for Zoom desktop, Teams desktop, or non-Chrome browsers.
               </div>
             </div>
           )}
 
-          {/* Upload tab */}
-          {activeTab === 'upload' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                  Audio file
-                </label>
-                <div
-                  className="rounded-2xl p-10 text-center transition-all cursor-pointer"
-                  style={{
-                    background: dragOver
-                      ? 'rgba(245,158,11,0.08)'
-                      : audioFile
-                      ? 'rgba(245,158,11,0.05)'
-                      : 'rgba(255,255,255,0.02)',
-                    border: dragOver
-                      ? '2px dashed rgba(245,158,11,0.5)'
-                      : audioFile
-                      ? '2px dashed rgba(245,158,11,0.3)'
-                      : '2px dashed rgba(255,255,255,0.1)',
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) setAudioFile(f); }}
-                >
-                  {audioFile ? (
-                    <div>
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mx-auto mb-3" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>🎵</div>
-                      <p className="font-semibold text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>{audioFile.name}</p>
-                      <p className="text-xs mt-1 mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>{(audioFile.size / 1024 / 1024).toFixed(1)} MB</p>
-                      <button type="button" onClick={() => setAudioFile(null)} className="text-xs transition-colors" style={{ color: '#fb7185' }}>
-                        Remove file
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mx-auto mb-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>🎙️</div>
-                      <p className="font-medium text-sm mb-1" style={{ color: 'rgba(255,255,255,0.6)' }}>Drag &amp; drop audio here</p>
-                      <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.25)' }}>WAV, MP3, OGG, WebM · Max 200 MB</p>
-                      <label
-                        className="cursor-pointer inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all"
-                        style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}
-                      >
-                        Browse file
-                        <input type="file" accept="audio/*" className="hidden" onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)} />
-                      </label>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {error && (
-                <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(251,113,133,0.1)', border: '1px solid rgba(251,113,133,0.2)', color: '#fb7185' }}>
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={!audioFile}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99]"
-                style={audioFile ? { background: 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 25%, #f59e0b 50%, #fbbf24 75%, #f59e0b 100%)', backgroundSize: '400% auto', color: '#07071a' } : { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.3)' }}
-              >
-                <UploadIcon />
-                Process uploaded audio
-              </button>
-              <p className="text-center text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                Transcribed and translated using Sarvam AI
-              </p>
-            </div>
-          )}
         </div>
       </div>
-    </form>
+    </div>
   );
 }

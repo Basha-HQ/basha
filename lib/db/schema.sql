@@ -169,3 +169,23 @@ ALTER TABLE flags
 -- Prevent same user flagging same segment more than once (atomic, race-safe)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_flags_unique_user_segment
   ON flags (transcript_id, user_id);
+
+-- ── Sprint 5 additions — Chrome Extension (primary recorder) ───────────────────
+
+-- Extension auth tokens (long-lived, token-based auth for the Chrome extension)
+CREATE TABLE IF NOT EXISTS extension_tokens (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   TEXT NOT NULL UNIQUE,   -- SHA-256 of raw token; raw token is never stored
+  name         TEXT DEFAULT 'Chrome Extension',
+  expires_at   TIMESTAMPTZ NOT NULL,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_ext_tokens_user ON extension_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_ext_tokens_hash ON extension_tokens(token_hash);
+
+-- Track how a meeting was recorded (bot vs extension vs manual upload)
+ALTER TABLE meetings
+  ADD COLUMN IF NOT EXISTS recorder_type TEXT DEFAULT 'bot'
+    CHECK (recorder_type IN ('bot', 'extension', 'upload'));

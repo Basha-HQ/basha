@@ -1,9 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { query, queryOne } from '@/lib/db';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, readFile, stat } from 'fs/promises';
 import path from 'path';
 import os from 'os';
+
+// GET /api/meetings/[id]/audio — stream audio file for playback
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  const meeting = await queryOne<{ audio_path: string | null }>(
+    'SELECT audio_path FROM meetings WHERE id = $1 AND user_id = $2',
+    [id, session.user.id]
+  );
+
+  if (!meeting?.audio_path) {
+    return NextResponse.json({ error: 'No audio file' }, { status: 404 });
+  }
+
+  // Resolve the file path — could be absolute (temp dir) or relative (public/uploads)
+  const audioPath = path.isAbsolute(meeting.audio_path)
+    ? meeting.audio_path
+    : path.join(process.cwd(), meeting.audio_path);
+
+  try {
+    const fileStat = await stat(audioPath);
+    const fileSize = fileStat.size;
+    const ext = path.extname(audioPath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.webm': 'audio/webm',
+      '.mp4': 'audio/mp4',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg',
+    };
+    const contentType = mimeMap[ext] || 'audio/webm';
+
+    const rangeHeader = _req.headers.get('range');
+
+    if (rangeHeader) {
+      // Implement range requests so browsers can seek in the audio file
+      const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (match) {
+        const start = parseInt(match[1], 10);
+        const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+        const clampedEnd = Math.min(end, fileSize - 1);
+        const chunkSize = clampedEnd - start + 1;
+
+        const fileBuffer = await readFile(audioPath);
+        const chunk = fileBuffer.subarray(start, clampedEnd + 1);
+
+        return new NextResponse(chunk, {
+          status: 206,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Range': `bytes ${start}-${clampedEnd}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(chunkSize),
+            'Cache-Control': 'private, max-age=3600',
+          },
+        });
+      }
+    }
+
+    // No range header — return full file
+    const fileBuffer = await readFile(audioPath);
+    return new NextResponse(fileBuffer, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': String(fileSize),
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: 'Audio file not found on disk' }, { status: 404 });
+  }
+}
 
 // POST /api/meetings/[id]/audio — upload audio file for a meeting
 export async function POST(

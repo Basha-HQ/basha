@@ -235,9 +235,8 @@ export default async function MeetingDetailPage({
               meetingId={id}
               transcripts={transcripts}
               meetingTitle={meeting.title}
-              audioPath={meeting.audio_path
-                ? (meeting.audio_path.startsWith('/') ? meeting.audio_path : `/${meeting.audio_path}`)
-                : undefined}
+              audioPath={meeting.audio_path ? `/api/meetings/${id}/audio` : undefined}
+              knownDuration={meeting.duration ?? undefined}
               flaggedSegmentIds={flaggedSegmentIds}
             />
           </div>

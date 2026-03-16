@@ -11,6 +11,8 @@ interface Props {
   onRegisterSeek: (fn: (seconds: number) => void) => void;
   /** Called once when audio metadata loads so parent can compute estimated timestamps */
   onDurationLoad: (duration: number) => void;
+  /** Duration from the DB — used as fallback when WebM metadata reports Infinity */
+  knownDuration?: number;
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -31,13 +33,17 @@ export function AudioPlayer({
   onActiveSegmentChange,
   onRegisterSeek,
   onDurationLoad,
+  knownDuration,
 }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  // Pre-seed duration from DB so scrubber works before metadata loads
+  const [duration, setDuration] = useState(knownDuration ?? 0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const isDraggingRef = useRef(false);
+  // True while we're doing the "seek to end" trick to compute WebM duration
+  const fixingDurationRef = useRef(false);
 
   // Sync is only meaningful when at least one timestamp is non-zero
   const hasTimestamps = effectiveTimestamps.some((t) => t > 0);
@@ -95,8 +101,29 @@ export function AudioPlayer({
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => {
           const d = audioRef.current?.duration ?? 0;
-          setDuration(d);
-          onDurationLoad(d);
+          if (!isFinite(d) || d === 0) {
+            // WebM files from MediaRecorder have no duration header — seek to end to compute it
+            fixingDurationRef.current = true;
+            audioRef.current!.currentTime = 1e9;
+          } else {
+            setDuration(d);
+            onDurationLoad(d);
+          }
+        }}
+        onSeeked={() => {
+          if (fixingDurationRef.current && audioRef.current) {
+            fixingDurationRef.current = false;
+            const d = audioRef.current.currentTime; // browser clamped to real end
+            if (d > 0) {
+              setDuration(d);
+              onDurationLoad(d);
+            } else if (knownDuration && knownDuration > 0) {
+              // Range requests may not be supported — fall back to DB duration
+              setDuration(knownDuration);
+              onDurationLoad(knownDuration);
+            }
+            audioRef.current.currentTime = 0; // reset to start
+          }
         }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
