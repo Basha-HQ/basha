@@ -76,7 +76,7 @@ export const StardustButton = ({
     opacity: inactive ? 0.38 : 1,
     transition: inactive ? 'none' : 'transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease',
     boxShadow: variant === 'outline' ? outlineShadow : solidShadow,
-    pointerEvents: inactive ? 'none' : 'auto',
+    pointerEvents: 'auto',
     letterSpacing: '0.01em',
   };
 
