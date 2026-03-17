@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { DemoTranscriptTabs } from '@/components/landing/DemoTranscriptTabs';
 import { RotatingWord } from '@/components/landing/RotatingWord';
 import { FadeIn } from '@/components/ui/FadeIn';
+import { StardustButton } from '@/components/ui/stardust-button';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
 
@@ -167,33 +168,46 @@ export default function LandingPage() {
         style={{
           backgroundColor: 'rgba(7,7,26,0.92)',
           backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
         }}
       >
         <nav className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm"
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#07071a' }}
-            >
-              B
+          {/* Left: Logo + Badge + Nav links */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm"
+                style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#07071a' }}
+              >
+                B
+              </div>
+              <span className="font-bold text-xl tracking-tight text-white">Basha</span>
+              <span
+                className="hidden sm:inline-flex text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
+              >
+                Built for India
+              </span>
             </div>
-            <span className="font-bold text-xl tracking-tight text-white">Basha</span>
-            <span
-              className="hidden sm:inline-flex text-xs font-semibold px-2.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
-            >
-              Built for India
-            </span>
+            <div className="hidden md:flex items-center gap-5">
+              <Link
+                href="/pricing"
+                className="text-sm font-medium transition-colors hover:text-amber-400"
+                style={{ color: 'rgba(255,255,255,0.55)' }}
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/blog"
+                className="text-sm font-medium transition-colors hover:text-amber-400"
+                style={{ color: 'rgba(255,255,255,0.55)' }}
+              >
+                Blog
+              </Link>
+            </div>
           </div>
+
+          {/* Right: Sign in + CTA */}
           <div className="flex items-center gap-3">
-            <Link
-              href="/pricing"
-              className="text-sm font-medium transition-colors hover:text-amber-400"
-              style={{ color: 'rgba(255,255,255,0.55)' }}
-            >
-              Pricing
-            </Link>
             <Link
               href="/login"
               className="text-sm font-medium transition-colors hover:text-amber-400"
@@ -201,23 +215,16 @@ export default function LandingPage() {
             >
               Sign in
             </Link>
-            <Link
-              href="/signup"
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-105 btn-amber-shimmer"
-              style={{ color: '#07071a' }}
-            >
-              Get started free
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Link>
+            <StardustButton href="/signup" size="sm">
+              Get started free →
+            </StardustButton>
           </div>
         </nav>
       </div>
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section
-        className="relative overflow-hidden px-6 pt-16 pb-0"
+        className="relative overflow-hidden px-6 pt-24 pb-0"
         style={{
           backgroundColor: '#07071a',
           backgroundImage: `
@@ -257,26 +264,12 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all hover:scale-105 hover:brightness-110 btn-amber-shimmer"
-              style={{ color: '#07071a' }}
-            >
-              Start for free
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Link>
-            <a
-              href="#demo"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all hover:bg-white/10"
-              style={{ color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.15)' }}
-            >
-              See it in action
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </a>
+            <StardustButton href="/signup" size="md">
+              Start for free →
+            </StardustButton>
+            <StardustButton href="#demo" size="md" accentColor="#a78bfa">
+              See it in action ↓
+            </StardustButton>
           </div>
 
           {/* Floating preview card */}
@@ -716,16 +709,9 @@ export default function LandingPage() {
             <p className="text-lg mb-10" style={{ color: 'rgba(255,255,255,0.45)' }}>
               Join Indian teams who speak naturally and document clearly.
             </p>
-            <Link
-              href="/signup"
-              className="inline-flex items-center gap-2 px-10 py-5 rounded-2xl font-bold text-lg transition-all hover:scale-105 hover:brightness-110 btn-amber-shimmer"
-              style={{ color: '#07071a' }}
-            >
-              Get started free
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Link>
+            <StardustButton href="/signup" size="lg">
+              Get started free →
+            </StardustButton>
             <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
               No credit card required · No bot joining your meeting · Chrome extension
             </p>

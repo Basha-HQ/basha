@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { StardustButton } from '@/components/ui/stardust-button';
 
 type TabKey = 'tanglish' | 'hinglish' | 'teluglish' | 'kanglish';
 
@@ -135,28 +136,21 @@ export function DemoTranscriptTabs() {
   return (
     <div className="w-full max-w-5xl mx-auto">
       {/* Tab bar */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="flex gap-3 mb-6 flex-wrap">
         {tabs.map((tab) => {
           const isActive = tab === active;
           const d = demos[tab];
           return (
-            <button
+            <StardustButton
               key={tab}
+              size="sm"
+              accentColor={d.accent}
+              inactive={!isActive}
               onClick={() => setActive(tab)}
-              className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200 cursor-pointer"
-              style={
-                isActive
-                  ? { background: d.accent, color: '#07071a' }
-                  : {
-                      background: 'rgba(255,255,255,0.06)',
-                      color: 'rgba(255,255,255,0.5)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                    }
-              }
             >
               {d.label}
-              <span className="ml-1.5 text-xs font-normal opacity-70">{d.subtitle}</span>
-            </button>
+              <span style={{ opacity: 0.65, fontWeight: 400, fontSize: '0.85em' }}>{d.subtitle}</span>
+            </StardustButton>
           );
         })}
       </div>
