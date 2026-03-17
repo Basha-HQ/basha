@@ -10,12 +10,30 @@ interface StardustButtonProps {
   accentColor?: string;
   href?: string;
   inactive?: boolean;
+  variant?: 'solid' | 'outline';
 }
 
 const sizeConfig = {
-  sm: { fontSize: '13px', padding: '10px 20px', borderRadius: '100px' },
-  md: { fontSize: '16px', padding: '16px 32px', borderRadius: '100px' },
-  lg: { fontSize: '18px', padding: '20px 44px', borderRadius: '100px' },
+  sm: { fontSize: '13px', padding: '9px 18px', borderRadius: '10px', fontWeight: 600 },
+  md: { fontSize: '15px', padding: '14px 26px', borderRadius: '12px', fontWeight: 700 },
+  lg: { fontSize: '17px', padding: '18px 38px', borderRadius: '14px', fontWeight: 700 },
+};
+
+// Returns perceived luminance to decide text color (dark on light, light on dark)
+const isLightColor = (hex: string): boolean => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return false;
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 128;
+};
+
+const hexToRgb = (hex: string): string => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
+    : '245, 158, 11';
 };
 
 export const StardustButton = ({
@@ -26,119 +44,65 @@ export const StardustButton = ({
   accentColor = '#f59e0b',
   href,
   inactive = false,
+  variant = 'solid',
   ...props
 }: StardustButtonProps) => {
-  const { fontSize, padding, borderRadius } = sizeConfig[size];
-
-  // Convert hex to rgba components for glow effects
-  const hexToRgb = (hex: string) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result
-      ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-      : '245, 158, 11';
-  };
-
+  const { fontSize, padding, borderRadius, fontWeight } = sizeConfig[size];
   const rgb = hexToRgb(accentColor);
+  const light = isLightColor(accentColor);
+  const textColor = variant === 'outline' ? accentColor : light ? '#07071a' : '#ffffff';
+
+  const solidShadow = `0 2px 12px rgba(${rgb}, 0.45), 0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18)`;
+  const outlineShadow = `0 2px 8px rgba(${rgb}, 0.2), 0 1px 2px rgba(0,0,0,0.15)`;
 
   const buttonStyle: React.CSSProperties = {
-    outline: 'none',
-    cursor: 'pointer',
-    border: 0,
-    position: 'relative',
-    borderRadius,
-    backgroundColor: '#07071a',
-    transition: 'all 0.2s ease',
-    display: 'inline-block',
-    textDecoration: 'none',
-    opacity: inactive ? 0.45 : 1,
-    boxShadow: inactive
-      ? `inset 0 0.3rem 0.9rem rgba(255,255,255,0.05),
-         inset 0 -0.1rem 0.3rem rgba(0,0,0,0.7),
-         0 2px 8px rgba(0,0,0,0.4)`
-      : `inset 0 0.3rem 0.9rem rgba(${rgb},0.25),
-         inset 0 -0.1rem 0.3rem rgba(0,0,0,0.7),
-         inset 0 -0.4rem 0.9rem rgba(${rgb},0.4),
-         0 3rem 3rem rgba(0,0,0,0.3),
-         0 1rem 1rem -0.6rem rgba(0,0,0,0.8)`,
-  };
-
-  const wrapStyle: React.CSSProperties = {
-    fontSize,
-    fontWeight: 600,
-    color: inactive ? 'rgba(255,255,255,0.35)' : `rgba(${rgb}, 0.95)`,
-    padding,
-    borderRadius: 'inherit',
-    position: 'relative',
-    overflow: 'hidden',
-  };
-
-  const pStyle: React.CSSProperties = {
-    display: 'flex',
+    display: 'inline-flex',
     alignItems: 'center',
-    gap: '8px',
-    margin: 0,
-    transition: 'all 0.2s ease',
-    transform: 'translateY(2%)',
-    maskImage: `linear-gradient(to bottom, rgba(${rgb},1) 40%, transparent)`,
-    WebkitMaskImage: `linear-gradient(to bottom, rgba(${rgb},1) 40%, transparent)`,
-    whiteSpace: 'nowrap' as const,
+    justifyContent: 'center',
+    gap: '7px',
+    fontSize,
+    fontWeight,
+    padding,
+    borderRadius,
+    cursor: inactive ? 'default' : 'pointer',
+    border: variant === 'outline' ? `1.5px solid ${accentColor}` : 'none',
+    background: variant === 'outline'
+      ? 'transparent'
+      : `linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(0,0,0,0.06) 100%), ${accentColor}`,
+    color: textColor,
+    textDecoration: 'none',
+    whiteSpace: 'nowrap',
+    outline: 'none',
+    opacity: inactive ? 0.38 : 1,
+    transition: inactive ? 'none' : 'transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease',
+    boxShadow: variant === 'outline' ? outlineShadow : solidShadow,
+    pointerEvents: inactive ? 'none' : 'auto',
+    letterSpacing: '0.01em',
   };
 
   const uid = React.useId().replace(/:/g, '');
 
-  const css = `
-    .stardust-${uid} .sd-wrap::before,
-    .stardust-${uid} .sd-wrap::after {
-      content: "";
-      position: absolute;
-      transition: all 0.3s ease;
+  const hoverCss = inactive ? '' : `
+    .basha-btn-${uid}:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+      box-shadow: ${variant === 'outline'
+        ? `0 4px 14px rgba(${rgb}, 0.3), 0 2px 4px rgba(0,0,0,0.15)`
+        : `0 4px 18px rgba(${rgb}, 0.6), 0 2px 5px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.22)`};
     }
-    .stardust-${uid} .sd-wrap::before {
-      left: -15%; right: -15%; bottom: 25%; top: -100%;
-      border-radius: 50%;
-      background-color: rgba(${rgb}, 0.12);
-    }
-    .stardust-${uid} .sd-wrap::after {
-      left: 6%; right: 6%; top: 12%; bottom: 40%;
-      border-radius: 22px 22px 0 0;
-      box-shadow: inset 0 10px 8px -10px rgba(${rgb}, 0.5);
-      background: linear-gradient(180deg, rgba(${rgb},0.2) 0%, transparent 50%);
-    }
-    .stardust-${uid} .sd-wrap .sd-star-default { display: inline; }
-    .stardust-${uid} .sd-wrap .sd-star-hover   { display: none; }
-    .stardust-${uid}:hover .sd-wrap .sd-star-default { display: none; }
-    .stardust-${uid}:hover .sd-wrap .sd-star-hover   { display: inline; }
-    .stardust-${uid}:hover {
-      box-shadow:
-        inset 0 0.3rem 0.5rem rgba(${rgb},0.35),
-        inset 0 -0.1rem 0.3rem rgba(0,0,0,0.7),
-        inset 0 -0.4rem 0.9rem rgba(${rgb},0.55),
-        0 3rem 3rem rgba(0,0,0,0.3),
-        0 1rem 1rem -0.6rem rgba(0,0,0,0.8);
-    }
-    .stardust-${uid}:hover .sd-wrap::before { transform: translateY(-5%); }
-    .stardust-${uid}:hover .sd-wrap::after  { opacity: 0.4; transform: translateY(5%); }
-    .stardust-${uid}:hover .sd-wrap .sd-p   { transform: translateY(-4%); }
-    .stardust-${uid}:active {
-      transform: translateY(3px);
-      box-shadow:
-        inset 0 0.3rem 0.5rem rgba(${rgb},0.45),
-        inset 0 -0.1rem 0.3rem rgba(0,0,0,0.8),
-        inset 0 -0.4rem 0.9rem rgba(${rgb},0.35),
-        0 1rem 1rem rgba(0,0,0,0.2);
+    .basha-btn-${uid}:active {
+      transform: translateY(1px);
+      filter: brightness(0.97);
+      box-shadow: ${variant === 'outline'
+        ? `0 1px 4px rgba(${rgb}, 0.2)`
+        : `0 1px 6px rgba(${rgb}, 0.35), inset 0 1px 0 rgba(255,255,255,0.1)`};
     }
   `;
 
   const inner = (
     <>
-      <style>{css}</style>
-      <div className="sd-wrap" style={wrapStyle}>
-        <p className="sd-p" style={pStyle}>
-          <span className="sd-star-default">✧</span>
-          <span className="sd-star-hover">✦</span>
-          {children}
-        </p>
-      </div>
+      {hoverCss && <style>{hoverCss}</style>}
+      {children}
     </>
   );
 
@@ -146,7 +110,7 @@ export const StardustButton = ({
     return (
       <a
         href={href}
-        className={`stardust-${uid} ${className}`}
+        className={`basha-btn-${uid} ${className}`}
         style={buttonStyle}
         onClick={onClick}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
@@ -158,7 +122,7 @@ export const StardustButton = ({
 
   return (
     <button
-      className={`stardust-${uid} ${className}`}
+      className={`basha-btn-${uid} ${className}`}
       style={buttonStyle}
       onClick={onClick}
       {...(props as React.ButtonHTMLAttributes<HTMLButtonElement>)}

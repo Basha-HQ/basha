@@ -163,13 +163,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white" style={{ fontFamily: 'var(--font-geist-sans, system-ui)' }}>
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-50 w-full"
-        style={{
-          backgroundColor: 'rgba(7,7,26,0.92)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
+      <div className="fixed top-0 left-0 right-0 z-50 w-full">
         <nav className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
           {/* Left: Logo + Badge + Nav links */}
           <div className="flex items-center gap-6">
@@ -267,7 +261,7 @@ export default function LandingPage() {
             <StardustButton href="/signup" size="md">
               Start for free →
             </StardustButton>
-            <StardustButton href="#demo" size="md" accentColor="#a78bfa">
+            <StardustButton href="#demo" size="md" variant="outline">
               See it in action ↓
             </StardustButton>
           </div>
