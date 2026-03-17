@@ -6,6 +6,7 @@ import { MeetingSummaryCard } from '@/components/transcript/MeetingSummaryCard';
 import { MeetingStatusPoller } from '@/components/meetings/MeetingStatusPoller';
 import { StopBotButton } from '@/components/meetings/StopBotButton';
 import { MeetingTitleEditor } from '@/components/meetings/MeetingTitleEditor';
+import { SharePanel } from '@/components/meetings/SharePanel';
 import Link from 'next/link';
 
 interface Meeting {
@@ -19,6 +20,8 @@ interface Meeting {
   created_at: string;
   completed_at: string | null;
   audio_path: string | null;
+  speaker_labels: Record<string, string> | null;
+  share_token: string | null;
 }
 
 interface TranscriptRow {
@@ -51,7 +54,7 @@ export default async function MeetingDetailPage({
   const userId = session!.user.id;
 
   const meeting = await queryOne<Meeting>(
-    `SELECT id, title, meeting_link, platform, status, duration, summary, created_at, completed_at, audio_path
+    `SELECT id, title, meeting_link, platform, status, duration, summary, created_at, completed_at, audio_path, speaker_labels, share_token
      FROM meetings WHERE id = $1 AND user_id = $2`,
     [id, userId]
   );
@@ -230,7 +233,8 @@ export default async function MeetingDetailPage({
         {/* Completed — show summary + transcript */}
         {meeting.status === 'completed' && (
           <div className="space-y-6">
-            {summary && <MeetingSummaryCard summary={summary} duration={meeting.duration} />}
+            {summary && <MeetingSummaryCard summary={summary} duration={meeting.duration} meetingTitle={meeting.title} />}
+            <SharePanel meetingId={id} initialShareToken={meeting.share_token} />
             <TranscriptViewer
               meetingId={id}
               transcripts={transcripts}
@@ -238,6 +242,7 @@ export default async function MeetingDetailPage({
               audioPath={meeting.audio_path ? `/api/meetings/${id}/audio` : undefined}
               knownDuration={meeting.duration ?? undefined}
               flaggedSegmentIds={flaggedSegmentIds}
+              speakerLabels={meeting.speaker_labels ?? undefined}
             />
           </div>
         )}

@@ -10,6 +10,7 @@ interface Meeting {
   status: string;
   created_at: string;
   duration: number | null;
+  source_language: string | null;
 }
 
 export const metadata = { title: 'Meeting History — LinguaMeet' };
@@ -19,7 +20,7 @@ export default async function MeetingsPage() {
   const userId = session!.user.id;
 
   const meetings = await query<Meeting>(
-    `SELECT id, title, platform, status, created_at, duration
+    `SELECT id, title, platform, status, created_at, duration, source_language
      FROM meetings
      WHERE user_id = $1
      ORDER BY created_at DESC`,

@@ -9,6 +9,7 @@ interface Meeting {
   status: string;
   created_at: string;
   duration: number | null;
+  source_language: string | null;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -29,6 +30,26 @@ function formatDate(dateStr: string): string {
   if (isSameDay(date, now)) return `Today at ${time}`;
   if (isSameDay(date, yesterday)) return `Yesterday at ${time}`;
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ` at ${time}`;
+}
+
+// Maps Sarvam language codes (BCP-47) to human-readable badge labels
+const LANG_BADGE_MAP: Record<string, string> = {
+  'hi-IN': 'Hindi', hi: 'Hindi',
+  'ta-IN': 'Tamil', ta: 'Tamil',
+  'te-IN': 'Telugu', te: 'Telugu',
+  'kn-IN': 'Kannada', kn: 'Kannada',
+  'ml-IN': 'Malayalam', ml: 'Malayalam',
+  'mr-IN': 'Marathi', mr: 'Marathi',
+  'bn-IN': 'Bengali', bn: 'Bengali',
+  'gu-IN': 'Gujarati', gu: 'Gujarati',
+  'pa-IN': 'Punjabi', pa: 'Punjabi',
+  'od-IN': 'Odia', od: 'Odia',
+  'en-IN': 'English', en: 'English',
+};
+
+function languageBadge(lang: string | null): string | null {
+  if (!lang || lang === 'auto' || lang === 'unknown') return null;
+  return LANG_BADGE_MAP[lang] ?? lang.split('-')[0].toUpperCase();
 }
 
 function platformLabel(platform: string): string {
@@ -91,6 +112,7 @@ function PlatformIcon({ platform }: { platform: string }) {
 export function MeetingCard({ meeting }: { meeting: Meeting }) {
   const status = statusConfig(meeting.status);
   const duration = formatDuration(meeting.duration);
+  const langLabel = languageBadge(meeting.source_language);
 
   return (
     <Link href={`/meetings/${meeting.id}`}>
@@ -121,10 +143,21 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
             <p className="font-semibold text-sm sm:text-base truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>
               {meeting.title}
             </p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <p className="text-xs mt-0.5 flex items-center flex-wrap gap-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
               {platformLabel(meeting.platform)}
-              <span className="mx-1.5" style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
+              <span className="mx-0.5" style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
               {formatDate(meeting.created_at)}
+              {langLabel && (
+                <>
+                  <span className="mx-0.5" style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold"
+                    style={{ color: '#a5b4fc', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)' }}
+                  >
+                    {langLabel}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>

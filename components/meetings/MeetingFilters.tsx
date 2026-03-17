@@ -10,6 +10,7 @@ interface Meeting {
   status: string;
   created_at: string;
   duration: number | null;
+  source_language: string | null;
 }
 
 interface Props {

@@ -11,6 +11,7 @@ interface Meeting {
   status: string;
   created_at: string;
   duration: number | null;
+  source_language: string | null;
 }
 
 export const metadata = { title: 'Dashboard — LinguaMeet' };
@@ -28,7 +29,7 @@ export default async function DashboardPage() {
   const firstName = session!.user.name?.split(' ')[0] ?? 'there';
 
   const recentMeetings = await query<Meeting>(
-    `SELECT id, title, platform, status, created_at, duration
+    `SELECT id, title, platform, status, created_at, duration, source_language
      FROM meetings
      WHERE user_id = $1
      ORDER BY created_at DESC

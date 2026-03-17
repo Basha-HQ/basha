@@ -28,7 +28,7 @@ export async function GET(
   return NextResponse.json({ meeting });
 }
 
-// PATCH /api/meetings/[id] — update meeting (title, status)
+// PATCH /api/meetings/[id] — update meeting (title, status, speaker_labels)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,13 +39,28 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const { title, status } = await req.json();
+  const { title, status, speaker_labels } = await req.json();
+
+  // Validate speaker_labels if provided — must be a flat object of string → string
+  if (speaker_labels !== undefined) {
+    if (typeof speaker_labels !== 'object' || Array.isArray(speaker_labels)) {
+      return NextResponse.json({ error: 'speaker_labels must be an object' }, { status: 400 });
+    }
+    for (const [k, v] of Object.entries(speaker_labels)) {
+      if (typeof k !== 'string' || typeof v !== 'string') {
+        return NextResponse.json({ error: 'speaker_labels keys and values must be strings' }, { status: 400 });
+      }
+    }
+  }
 
   const meeting = await queryOne(
-    `UPDATE meetings SET title = COALESCE($1, title), status = COALESCE($2, status)
-     WHERE id = $3 AND user_id = $4
-     RETURNING id, title, status`,
-    [title, status, id, session.user.id]
+    `UPDATE meetings
+     SET title = COALESCE($1, title),
+         status = COALESCE($2, status),
+         speaker_labels = COALESCE($3::jsonb, speaker_labels)
+     WHERE id = $4 AND user_id = $5
+     RETURNING id, title, status, speaker_labels`,
+    [title ?? null, status ?? null, speaker_labels !== undefined ? JSON.stringify(speaker_labels) : null, id, session.user.id]
   );
 
   if (!meeting) {

@@ -99,14 +99,14 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     const summary = await generateSummary(fullEnglish, meeting?.title);
     const aiTitle = await generateMeetingTitle(summary);
 
-    // 6. Mark completed
+    // 6. Mark completed — also persist the detected language so meeting cards can show it
     await query(
       `UPDATE meetings
-       SET status = 'completed', summary = $1, completed_at = NOW()${aiTitle ? ', title = $3' : ''}
+       SET status = 'completed', summary = $1, source_language = $3, completed_at = NOW()${aiTitle ? ', title = $4' : ''}
        WHERE id = $2`,
       aiTitle
-        ? [JSON.stringify(summary), meetingId, aiTitle]
-        : [JSON.stringify(summary), meetingId]
+        ? [JSON.stringify(summary), meetingId, detectedLang, aiTitle]
+        : [JSON.stringify(summary), meetingId, detectedLang]
     );
 
     console.log(`[pipeline] Processing complete for meeting ${meetingId}`);

@@ -206,3 +206,14 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_prt_token_hash ON password_reset_tokens(token_hash);
+
+-- ── Sprint 7 additions — Speaker labels + shareable transcript links ──────────
+
+-- speaker_labels: JSONB map of raw speaker ID → user-provided display name
+-- e.g. { "SPEAKER_00": "Ravi", "SPEAKER_01": "Priya" }
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS speaker_labels JSONB DEFAULT '{}';
+
+-- share_token: UUID generated on demand; NULL = private
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS share_token UUID;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_share_token ON meetings(share_token);
