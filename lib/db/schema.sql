@@ -189,3 +189,20 @@ CREATE INDEX IF NOT EXISTS idx_ext_tokens_hash ON extension_tokens(token_hash);
 ALTER TABLE meetings
   ADD COLUMN IF NOT EXISTS recorder_type TEXT DEFAULT 'bot'
     CHECK (recorder_type IN ('bot', 'extension', 'upload'));
+
+-- ── Sprint 6 additions — Persistent audio + password reset ──────────────────
+
+-- Store audio buffer directly in DB so it survives Railway deploys/restarts
+-- and Recall.ai presigned URL expiry (~7 days)
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS audio_data BYTEA;
+
+-- Password reset tokens (1hr expiry, single-use, SHA-256 hashed)
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used        BOOLEAN DEFAULT false,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_prt_token_hash ON password_reset_tokens(token_hash);

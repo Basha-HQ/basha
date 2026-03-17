@@ -2,13 +2,16 @@
 
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justReset = searchParams.get('reset') === '1';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -49,6 +52,11 @@ export function LoginForm() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        {justReset && (
+          <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-green-50 border border-green-200 text-green-700">
+            Password updated successfully. Sign in with your new password.
+          </div>
+        )}
         <Button
           type="button"
           variant="secondary"
@@ -80,16 +88,23 @@ export function LoginForm() {
             required
             autoComplete="email"
           />
-          <Input
-            label="Password"
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            autoComplete="current-password"
-          />
+          <div>
+            <Input
+              label="Password"
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
+            />
+            <div className="flex justify-end mt-1">
+              <Link href="/forgot-password" className="text-xs text-gray-400 hover:text-indigo-600 transition-colors">
+                Forgot password?
+              </Link>
+            </div>
+          </div>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>

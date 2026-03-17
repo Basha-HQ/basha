@@ -12,6 +12,7 @@
 import { query, queryOne } from '@/lib/db';
 import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
+import { sendTranscriptReadyEmail } from '@/lib/email';
 
 export interface ProcessingInput {
   meetingId: string;
@@ -109,6 +110,22 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     );
 
     console.log(`[pipeline] Processing complete for meeting ${meetingId}`);
+
+    // 7. Send "transcript ready" email with full summary embedded
+    const userRow = await queryOne<{ email: string; name: string }>(
+      `SELECT u.email, u.name FROM users u JOIN meetings m ON m.user_id = u.id WHERE m.id = $1`,
+      [meetingId]
+    ).catch(() => null);
+    if (userRow) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+      sendTranscriptReadyEmail(
+        userRow.email,
+        userRow.name,
+        aiTitle ?? 'Your Meeting',
+        summary,
+        `${appUrl}/meetings/${meetingId}`
+      ).catch(console.error); // fire-and-forget — never block the pipeline
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[pipeline] Processing error:', msg);

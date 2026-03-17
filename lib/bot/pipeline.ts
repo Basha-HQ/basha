@@ -10,6 +10,7 @@
 import { query, queryOne } from '@/lib/db';
 import { getRecordingUrl, type RecallBot } from '@/lib/recall/client';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
+import { sendBotFailureEmail } from '@/lib/email';
 
 export interface BotRow {
   id: string;
@@ -46,11 +47,12 @@ export async function handleRecordingReady(
     if (!audioRes.ok) throw new Error(`Failed to download recording: ${audioRes.status}`);
     const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
 
-    // 3. Store Recall download URL as audio_path (no local disk write needed)
+    // 3. Persist audio buffer in DB (BYTEA) — Recall.ai presigned URLs expire ~7 days,
+    //    storing the buffer directly gives permanent playback from our own endpoint.
     const ext = downloadUrl.includes('.mp4') ? 'mp4' : 'webm';
     await query(
-      `UPDATE meetings SET audio_path = $1 WHERE id = $2`,
-      [downloadUrl, bot.meeting_id]
+      `UPDATE meetings SET audio_data = $1, audio_path = $2 WHERE id = $3`,
+      [audioBuffer, `/api/meetings/${bot.meeting_id}/audio`, bot.meeting_id]
     );
 
     // 4. Fetch source_language for the meeting
@@ -81,8 +83,15 @@ export async function handleRecordingReady(
       [msg, bot.id]
     );
     // meetings.status is already set to 'failed' by the shared pipeline on throw
-  }
 
-  // suppress unused param lint — userId kept in signature for callers that pass it
-  void userId;
+    // Notify the user by email
+    const userRow = await queryOne<{ email: string; name: string; title: string }>(
+      `SELECT u.email, u.name, m.title FROM users u JOIN meetings m ON m.user_id = u.id WHERE m.id = $1`,
+      [bot.meeting_id]
+    ).catch(() => null);
+    if (userRow) {
+      sendBotFailureEmail(userRow.email, userRow.name, userRow.title ?? 'Your Meeting', msg)
+        .catch(console.error);
+    }
+  }
 }

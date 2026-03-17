@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { LoginForm } from '@/components/auth/LoginForm';
 import Link from 'next/link';
 
@@ -21,7 +22,9 @@ export default function LoginPage() {
           Built for India
         </span>
       </Link>
-      <LoginForm />
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }

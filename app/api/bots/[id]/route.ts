@@ -13,6 +13,7 @@ import {
   mapRecallStatus,
 } from '@/lib/recall/client';
 import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
+import { sendBotFailureEmail } from '@/lib/email';
 
 // ── GET — poll status ─────────────────────────────────────────────────────────
 
@@ -70,6 +71,16 @@ export async function GET(
         );
         bot.status = 'failed';
         bot.error = errorMsg;
+
+        // Notify user — fire-and-forget so it doesn't block the response
+        const userRow = await queryOne<{ email: string; name: string; title: string }>(
+          `SELECT u.email, u.name, m.title FROM users u JOIN meetings m ON m.user_id = u.id WHERE m.id = $1`,
+          [bot.meeting_id]
+        ).catch(() => null);
+        if (userRow) {
+          sendBotFailureEmail(userRow.email, userRow.name, userRow.title ?? 'Your Meeting', errorMsg)
+            .catch(console.error);
+        }
       } else if (mappedStatus !== bot.status) {
         // Status changed — update DB
         await query(

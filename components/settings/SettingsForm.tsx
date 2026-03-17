@@ -55,6 +55,15 @@ export function SettingsForm() {
   const [savingPlatform, setSavingPlatform] = useState(false);
   const [savedPlatform, setSavedPlatform] = useState(false);
 
+  // Output language (transcript translation target)
+  const [outputLanguage, setOutputLanguage] = useState('en');
+  const [savingOutput, setSavingOutput] = useState(false);
+  const [savedOutput, setSavedOutput] = useState(false);
+
+  // Auto-join calendar meetings
+  const [autoJoin, setAutoJoin] = useState(false);
+  const [savingAutoJoin, setSavingAutoJoin] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -64,6 +73,8 @@ export function SettingsForm() {
       .then((data) => {
         setLanguages(data.preferred_languages ?? []);
         setPlatform(data.meeting_platform ?? 'both');
+        setOutputLanguage(data.output_language ?? 'en');
+        setAutoJoin(data.auto_join_all ?? false);
       })
       .catch(() => setError('Failed to load settings'))
       .finally(() => setLoading(false));
@@ -103,6 +114,36 @@ export function SettingsForm() {
       setSavedPlatform(true);
     } finally {
       setSavingPlatform(false);
+    }
+  }
+
+  async function saveOutputLanguage() {
+    setSavingOutput(true);
+    setSavedOutput(false);
+    try {
+      await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ output_language: outputLanguage }),
+      });
+      setSavedOutput(true);
+    } finally {
+      setSavingOutput(false);
+    }
+  }
+
+  async function toggleAutoJoin() {
+    const next = !autoJoin;
+    setAutoJoin(next);
+    setSavingAutoJoin(true);
+    try {
+      await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_join_all: next }),
+      });
+    } finally {
+      setSavingAutoJoin(false);
     }
   }
 
@@ -193,6 +234,70 @@ export function SettingsForm() {
         </div>
         <SaveButton onClick={savePlatform} saving={savingPlatform} saved={savedPlatform} />
       </SectionCard>
+
+      {/* Output language */}
+      <SectionCard title="Transcript output language">
+        <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          Basha translates your meeting transcript to this language.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {[
+            { value: 'en', label: 'English', desc: 'Default — works with all AI features' },
+          ].map((opt) => {
+            const active = outputLanguage === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { setOutputLanguage(opt.value); setSavedOutput(false); }}
+                className="flex-1 p-4 rounded-xl text-left transition-all"
+                style={{
+                  background: active ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)',
+                  border: active ? '1.5px solid rgba(245,158,11,0.5)' : '1.5px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <div className="font-semibold text-sm" style={{ color: active ? '#f59e0b' : 'rgba(255,255,255,0.75)' }}>{opt.label}</div>
+                <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>{opt.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+        <SaveButton onClick={saveOutputLanguage} saving={savingOutput} saved={savedOutput} />
+      </SectionCard>
+
+      {/* Auto-join calendar meetings */}
+      {calendarConnected && (
+        <SectionCard title="Auto-join">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Automatically record all calendar meetings
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Basha will join every upcoming Google Calendar meeting that has a link.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoJoin}
+              onClick={toggleAutoJoin}
+              disabled={savingAutoJoin}
+              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 disabled:opacity-50"
+              style={{ background: autoJoin ? '#f59e0b' : 'rgba(255,255,255,0.12)' }}
+            >
+              <span
+                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform duration-200"
+                style={{
+                  background: 'white',
+                  transform: autoJoin ? 'translateX(20px)' : 'translateX(0)',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                }}
+              />
+            </button>
+          </div>
+        </SectionCard>
+      )}
 
       {/* Google Calendar */}
       <SectionCard title="Google Calendar">

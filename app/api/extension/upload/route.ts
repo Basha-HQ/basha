@@ -3,15 +3,15 @@
  * Receives the WebM audio blob from the Chrome extension and triggers the AI pipeline.
  * Returns 202 immediately; processing happens asynchronously.
  * Auth: Extension Bearer token.
+ *
+ * Audio is stored as BYTEA in meetings.audio_data so it survives Railway restarts.
+ * audio_path is set to the internal /api/meetings/:id/audio serve endpoint.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getExtensionUser } from '@/lib/extension/auth';
 import { queryOne, query } from '@/lib/db';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import os from 'os';
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,20 +51,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Meeting already processed' }, { status: 409 });
     }
 
-    // Save audio to a temp file so large files don't stay in memory
+    // Read audio into buffer
     const ext = audioFile.name?.split('.').pop() || 'webm';
     const fileName = `${meetingId}.${ext}`;
-    const tmpDir = path.join(os.tmpdir(), 'basha-extension');
-    await mkdir(tmpDir, { recursive: true });
-    const tmpPath = path.join(tmpDir, fileName);
-
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
-    await writeFile(tmpPath, audioBuffer);
 
-    // Store audio path and duration
+    // Persist audio in DB (BYTEA) — survives Railway restarts, no temp file needed
+    // audio_path points to the internal serve endpoint for stable browser playback
     await query(
-      `UPDATE meetings SET audio_path = $1, duration = $2 WHERE id = $3`,
-      [tmpPath, duration, meetingId]
+      `UPDATE meetings SET audio_data = $1, audio_path = $2, duration = $3 WHERE id = $4`,
+      [audioBuffer, `/api/meetings/${meetingId}/audio`, duration, meetingId]
     );
 
     // Trigger pipeline asynchronously — respond 202 immediately
