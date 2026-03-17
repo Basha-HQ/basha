@@ -115,7 +115,7 @@ export async function POST(
   }
 
   // Save file to writable tmp dir (works on Vercel serverless)
-  const uploadDir = path.join(os.tmpdir(), 'linguameet', session.user.id);
+  const uploadDir = path.join(os.tmpdir(), 'basha', session.user.id);
   await mkdir(uploadDir, { recursive: true });
 
   const ext = file.name.split('.').pop() ?? 'wav';
