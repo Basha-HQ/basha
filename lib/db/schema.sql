@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   preferred_languages   TEXT[]  DEFAULT '{}',
   output_language       TEXT    DEFAULT 'en',
   output_script         TEXT    DEFAULT 'roman',
+  speaking_language     TEXT    DEFAULT 'auto',
   meeting_platform      TEXT    DEFAULT 'both',
   onboarding_completed       BOOLEAN DEFAULT false,
   google_access_token        TEXT,

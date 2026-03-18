@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getExtensionUser } from '@/lib/extension/auth';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 
 function detectPlatform(url: string): 'google_meet' | 'zoom' | 'other' {
   if (url.includes('meet.google.com')) return 'google_meet';
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const {
-    sourceLanguage = 'auto',
+    sourceLanguage: bodySourceLanguage = 'auto',
     meetingUrl = '',
     title,
   } = body as {
@@ -30,6 +30,18 @@ export async function POST(req: NextRequest) {
     meetingUrl?: string;
     title?: string;
   };
+
+  // If extension didn't send a language, fall back to the user's settings preference
+  let sourceLanguage = bodySourceLanguage;
+  if (sourceLanguage === 'auto') {
+    const userRow = await queryOne<{ speaking_language: string }>(
+      'SELECT speaking_language FROM users WHERE id = $1',
+      [userId]
+    ).catch(() => null);
+    if (userRow?.speaking_language && userRow.speaking_language !== 'auto') {
+      sourceLanguage = userRow.speaking_language;
+    }
+  }
 
   const platform = detectPlatform(meetingUrl);
   const meetingTitle =

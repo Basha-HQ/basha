@@ -55,6 +55,11 @@ export function SettingsForm() {
   const [savingPlatform, setSavingPlatform] = useState(false);
   const [savedPlatform, setSavedPlatform] = useState(false);
 
+  // Primary speaking language (used for STT source language hint)
+  const [speakingLanguage, setSpeakingLanguage] = useState('auto');
+  const [savingSpeaking, setSavingSpeaking] = useState(false);
+  const [savedSpeaking, setSavedSpeaking] = useState(false);
+
   // Output language (transcript translation target)
   const [outputLanguage, setOutputLanguage] = useState('en');
   const [savingOutput, setSavingOutput] = useState(false);
@@ -80,6 +85,7 @@ export function SettingsForm() {
         setPlatform(data.meeting_platform ?? 'both');
         setOutputLanguage(data.output_language ?? 'en');
         setOutputScript(data.output_script ?? 'roman');
+        setSpeakingLanguage(data.speaking_language ?? 'auto');
         setAutoJoin(data.auto_join_all ?? false);
       })
       .catch(() => setError('Failed to load settings'))
@@ -135,6 +141,21 @@ export function SettingsForm() {
       setSavedScript(true);
     } finally {
       setSavingScript(false);
+    }
+  }
+
+  async function saveSpeakingLanguage() {
+    setSavingSpeaking(true);
+    setSavedSpeaking(false);
+    try {
+      await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speaking_language: speakingLanguage }),
+      });
+      setSavedSpeaking(true);
+    } finally {
+      setSavingSpeaking(false);
     }
   }
 
@@ -226,6 +247,44 @@ export function SettingsForm() {
           })}
         </div>
         <SaveButton onClick={saveLanguages} saving={savingLangs} saved={savedLangs} />
+      </SectionCard>
+
+      {/* Primary speaking language */}
+      <SectionCard title="Primary Speaking Language">
+        <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          The main language you speak in meetings. This ensures accurate transcription and translation even for code-mixed speech (e.g. Tanglish).
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {([
+            { code: 'auto', label: 'Auto-detect', native: 'Let Basha detect' },
+            { code: 'ta-IN', label: 'Tamil', native: 'தமிழ்' },
+            { code: 'hi-IN', label: 'Hindi', native: 'हिन्दी' },
+            { code: 'te-IN', label: 'Telugu', native: 'తెలుగు' },
+            { code: 'kn-IN', label: 'Kannada', native: 'ಕನ್ನಡ' },
+            { code: 'ml-IN', label: 'Malayalam', native: 'മലയാളം' },
+            { code: 'mr-IN', label: 'Marathi', native: 'मराठी' },
+            { code: 'bn-IN', label: 'Bengali', native: 'বাংলা' },
+            { code: 'en-IN', label: 'English', native: 'English only' },
+          ] as const).map((lang) => {
+            const active = speakingLanguage === lang.code;
+            return (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => { setSpeakingLanguage(lang.code); setSavedSpeaking(false); }}
+                className="p-4 rounded-2xl text-left transition-all duration-150"
+                style={{
+                  background: active ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)',
+                  border: active ? '1.5px solid rgba(245,158,11,0.6)' : '1.5px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <div className="font-bold text-sm" style={{ color: active ? '#f59e0b' : 'rgba(255,255,255,0.82)' }}>{lang.label}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{lang.native}</div>
+              </button>
+            );
+          })}
+        </div>
+        <SaveButton onClick={saveSpeakingLanguage} saving={savingSpeaking} saved={savedSpeaking} />
       </SectionCard>
 
       {/* Transcript script */}

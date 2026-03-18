@@ -45,11 +45,15 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       console.log('[pipeline] No diarized_entries — using sentence-split fallback');
     }
 
-    // Resolve detected language, falling back to per-meeting source_language
+    // Resolve language for translation.
+    // User-set source_language takes priority — Sarvam STT often returns 'en-IN'
+    // for code-mixed speech (e.g. Tanglish) which would incorrectly skip translation.
     const detectedLang =
-      sttResult.language_code && sttResult.language_code !== 'unknown'
-        ? sttResult.language_code
-        : (sourceLanguage ?? 'auto');
+      (sourceLanguage && sourceLanguage !== 'auto')
+        ? sourceLanguage
+        : (sttResult.language_code && sttResult.language_code !== 'unknown'
+            ? sttResult.language_code
+            : 'auto');
 
     // 2. Build segments — prefer diarized (real timestamps + speaker) over sentence split
     const segments: Array<{ text: string; startSeconds: number; speaker: string | null }> =
