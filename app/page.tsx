@@ -1,8 +1,9 @@
-import Link from 'next/link';
 import { DemoTranscriptTabs } from '@/components/landing/DemoTranscriptTabs';
 import { RotatingWord } from '@/components/landing/RotatingWord';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { StardustButton } from '@/components/ui/stardust-button';
+import { NavBar } from '@/components/landing/NavBar';
+import Link from 'next/link';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
 
@@ -160,61 +161,10 @@ const testimonials = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: 'var(--font-geist-sans, system-ui)' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#fafafa', fontFamily: 'var(--font-geist-sans, system-ui)' }}>
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
-      <div className="fixed top-0 left-0 right-0 z-50 w-full">
-        <nav className="flex items-center justify-between px-6 py-4 max-w-7xl mx-auto">
-          {/* Left: Logo + Badge + Nav links */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm"
-                style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', color: '#07071a' }}
-              >
-                B
-              </div>
-              <span className="font-bold text-xl tracking-tight text-white">Basha</span>
-              <span
-                className="hidden sm:inline-flex text-xs font-semibold px-2.5 py-0.5 rounded-full"
-                style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
-              >
-                Built for India
-              </span>
-            </div>
-            <div className="hidden md:flex items-center gap-5">
-              <Link
-                href="/pricing"
-                className="text-sm font-medium transition-colors hover:text-amber-400"
-                style={{ color: 'rgba(255,255,255,0.55)' }}
-              >
-                Pricing
-              </Link>
-              <Link
-                href="/blog"
-                className="text-sm font-medium transition-colors hover:text-amber-400"
-                style={{ color: 'rgba(255,255,255,0.55)' }}
-              >
-                Blog
-              </Link>
-            </div>
-          </div>
-
-          {/* Right: Sign in + CTA */}
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-medium transition-colors hover:text-amber-400"
-              style={{ color: 'rgba(255,255,255,0.55)' }}
-            >
-              Sign in
-            </Link>
-            <StardustButton href="/signup" size="sm">
-              Get started free →
-            </StardustButton>
-          </div>
-        </nav>
-      </div>
+      <NavBar />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section
@@ -329,7 +279,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Language Marquee ──────────────────────────────────────────────── */}
-      <div className="overflow-hidden py-5" style={{ backgroundColor: '#07071a', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="overflow-hidden py-5" style={{ backgroundColor: '#07071a' }}>
         <div className="flex animate-marquee whitespace-nowrap gap-3 w-max">
           {[...languages, ...languages].map((lang, i) => (
             <span
@@ -381,8 +331,11 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Gradient bridge: dark demo → light sections */}
+      <div style={{ height: 80, background: 'linear-gradient(to bottom, #0a0a1f 0%, #fafafa 100%)' }} />
+
       {/* ── Indian Meeting Reality ─────────────────────────────────────────── */}
-      <section className="px-6 py-24 bg-white">
+      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="max-w-2xl mb-16">
@@ -393,7 +346,7 @@ export default function LandingPage() {
               >
                 Every meeting tool was built for English.
                 <br />
-                <span className="text-gray-400">India doesn't work that way.</span>
+                <span style={{ color: '#9ca3af' }}>India doesn't work that way.</span>
               </h2>
             </div>
           </FadeIn>
@@ -407,7 +360,7 @@ export default function LandingPage() {
                 >
                   <div
                     className="absolute top-4 right-5 font-black text-6xl leading-none select-none"
-                    style={{ color: '#e8e8f0', fontVariantNumeric: 'tabular-nums' }}
+                    style={{ color: 'rgba(245,158,11,0.13)', fontVariantNumeric: 'tabular-nums' }}
                   >
                     {r.n}
                   </div>
@@ -448,7 +401,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── 5 USP Layers ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ background: '#f4f4f8' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="text-center mb-16">
@@ -515,7 +468,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── How It Works ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24 bg-white">
+      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
         <div className="max-w-4xl mx-auto">
           <FadeIn>
             <div className="text-center mb-16">
@@ -535,7 +488,7 @@ export default function LandingPage() {
             {/* Connector line */}
             <div
               className="hidden md:block absolute top-10 left-[calc(16.67%)] right-[calc(16.67%)] h-px"
-              style={{ background: 'linear-gradient(90deg, #e5e5f0, #6366f1, #e5e5f0)' }}
+              style={{ background: 'linear-gradient(90deg, #fafafa, #6366f1, #fafafa)' }}
             />
 
             {steps.map((step, i) => (
@@ -543,7 +496,7 @@ export default function LandingPage() {
                 <div className="flex flex-col items-center text-center px-6 relative">
                   <div
                     className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-black mb-6 relative z-10"
-                    style={{ background: '#07071a', color: '#f59e0b', boxShadow: '0 0 0 6px #ffffff' }}
+                    style={{ background: '#07071a', color: '#f59e0b', boxShadow: '0 0 0 6px #fafafa' }}
                   >
                     {step.n}
                   </div>
@@ -557,7 +510,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Comparison Table ──────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ background: '#f4f4f8' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
         <div className="max-w-4xl mx-auto">
           <FadeIn>
             <div className="text-center mb-14">
@@ -628,7 +581,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Testimonials ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24 bg-white">
+      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="text-center mb-14">
@@ -679,6 +632,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Gradient bridge: light sections → dark CTA */}
+      <div style={{ height: 80, background: 'linear-gradient(to bottom, #fafafa 0%, #07071a 100%)' }} />
 
       {/* ── CTA Banner ────────────────────────────────────────────────────── */}
       <section
