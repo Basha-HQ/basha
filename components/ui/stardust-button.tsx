@@ -14,9 +14,9 @@ interface StardustButtonProps {
 }
 
 const sizeConfig = {
-  sm: { fontSize: '13px', padding: '9px 18px', borderRadius: '10px', fontWeight: 600 },
-  md: { fontSize: '15px', padding: '14px 26px', borderRadius: '12px', fontWeight: 700 },
-  lg: { fontSize: '17px', padding: '18px 38px', borderRadius: '14px', fontWeight: 700 },
+  sm: { fontSize: '13px', padding: '9px 18px', borderRadius: '9999px', fontWeight: 600 },
+  md: { fontSize: '15px', padding: '14px 26px', borderRadius: '9999px', fontWeight: 700 },
+  lg: { fontSize: '17px', padding: '18px 38px', borderRadius: '9999px', fontWeight: 700 },
 };
 
 // Returns perceived luminance to decide text color (dark on light, light on dark)

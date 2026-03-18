@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { StardustButton } from '@/components/ui/stardust-button';
 
 export function NavBar() {
-  const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
+    const onScroll = () => setHidden(window.scrollY > 60);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
@@ -16,19 +16,10 @@ export function NavBar() {
   return (
     <div
       className="fixed top-0 left-0 right-0 z-50 w-full"
-      style={
-        scrolled
-          ? {
-              backgroundColor: 'rgba(7,7,26,0.92)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              borderBottom: '1px solid rgba(255,255,255,0.07)',
-              transition: 'background-color 0.25s ease, border-color 0.25s ease',
-            }
-          : {
-              transition: 'background-color 0.25s ease',
-            }
-      }
+      style={{
+        transform: hidden ? 'translateY(-100%)' : 'translateY(0)',
+        transition: 'transform 0.3s ease',
+      }}
     >
       <nav className="flex items-center justify-between pl-6 pr-8 py-4 max-w-7xl mx-auto">
         {/* Left: Logo + Badge + Nav links */}

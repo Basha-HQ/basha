@@ -3,6 +3,7 @@ import { RotatingWord } from '@/components/landing/RotatingWord';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { StardustButton } from '@/components/ui/stardust-button';
 import { NavBar } from '@/components/landing/NavBar';
+import { StickyCTA } from '@/components/landing/StickyCTA';
 import Link from 'next/link';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
@@ -161,10 +162,11 @@ const testimonials = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#fafafa', fontFamily: 'var(--font-geist-sans, system-ui)' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#07071a', fontFamily: 'var(--font-geist-sans, system-ui)' }}>
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
       <NavBar />
+      <StickyCTA />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section
@@ -331,22 +333,19 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Gradient bridge: dark demo → light sections */}
-      <div style={{ height: 80, background: 'linear-gradient(to bottom, #0a0a1f 0%, #fafafa 100%)' }} />
-
       {/* ── Indian Meeting Reality ─────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#0d0d24' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="max-w-2xl mb-16">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">The Reality</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">The Reality</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
               >
                 Every meeting tool was built for English.
                 <br />
-                <span style={{ color: '#9ca3af' }}>India doesn't work that way.</span>
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>India doesn't work that way.</span>
               </h2>
             </div>
           </FadeIn>
@@ -355,8 +354,8 @@ export default function LandingPage() {
             {realities.map((r, i) => (
               <FadeIn key={r.n} delay={i * 80}>
                 <div
-                  className="relative p-7 rounded-2xl overflow-hidden group transition-all duration-300 hover:-translate-y-1 hover:shadow-lg h-full"
-                  style={{ background: '#f8f8fc', border: '1px solid #e8e8f0' }}
+                  className="relative p-7 rounded-2xl overflow-hidden group transition-all duration-300 hover:-translate-y-1 h-full"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
                   <div
                     className="absolute top-4 right-5 font-black text-6xl leading-none select-none"
@@ -364,10 +363,10 @@ export default function LandingPage() {
                   >
                     {r.n}
                   </div>
-                  <h3 className="font-bold text-base leading-snug mb-3 pr-8 relative" style={{ color: '#07071a' }}>
+                  <h3 className="font-bold text-base leading-snug mb-3 pr-8 relative" style={{ color: '#ffffff' }}>
                     {r.title}
                   </h3>
-                  <p className="text-sm leading-relaxed relative" style={{ color: '#6b7280' }}>
+                  <p className="text-sm leading-relaxed relative" style={{ color: 'rgba(255,255,255,0.5)' }}>
                     {r.body}
                   </p>
                 </div>
@@ -401,18 +400,18 @@ export default function LandingPage() {
       </section>
 
       {/* ── 5 USP Layers ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#0b0b1f' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="text-center mb-16">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">What makes Basha different</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">What makes Basha different</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
               >
                 Five structural advantages
                 <br />
-                <span className="text-gray-400">no competitor can replicate.</span>
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>no competitor can replicate.</span>
               </h2>
             </div>
           </FadeIn>
@@ -421,12 +420,12 @@ export default function LandingPage() {
             {usps.map((usp, i) => (
               <FadeIn key={i} delay={i * 80}>
                 <div
-                  className="p-7 rounded-2xl bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-lg h-full"
-                  style={{ border: '1px solid #e5e5f0' }}
+                  className="p-7 rounded-2xl transition-all duration-300 hover:-translate-y-1 h-full"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
                   <div
                     className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
-                    style={{ background: '#f0f0ff', color: '#4f46e5' }}
+                    style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}
                   >
                     {usp.icon}
                   </div>
@@ -436,10 +435,10 @@ export default function LandingPage() {
                   >
                     {usp.tag}
                   </span>
-                  <h3 className="font-bold text-base leading-snug mb-3" style={{ color: '#07071a' }}>
+                  <h3 className="font-bold text-base leading-snug mb-3" style={{ color: '#ffffff' }}>
                     {usp.title}
                   </h3>
-                  <p className="text-sm leading-relaxed" style={{ color: '#6b7280' }}>
+                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
                     {usp.body}
                   </p>
                 </div>
@@ -468,18 +467,18 @@ export default function LandingPage() {
       </section>
 
       {/* ── How It Works ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#0d0d24' }}>
         <div className="max-w-4xl mx-auto">
           <FadeIn>
             <div className="text-center mb-16">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">How it works</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">How it works</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
               >
                 From install to dual transcript
                 <br />
-                <span className="text-gray-400">in three steps. No bots.</span>
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>in three steps. No bots.</span>
               </h2>
             </div>
           </FadeIn>
@@ -488,7 +487,7 @@ export default function LandingPage() {
             {/* Connector line */}
             <div
               className="hidden md:block absolute top-10 left-[calc(16.67%)] right-[calc(16.67%)] h-px"
-              style={{ background: 'linear-gradient(90deg, #fafafa, #6366f1, #fafafa)' }}
+              style={{ background: 'linear-gradient(90deg, #0d0d24, #6366f1, #0d0d24)' }}
             />
 
             {steps.map((step, i) => (
@@ -496,12 +495,12 @@ export default function LandingPage() {
                 <div className="flex flex-col items-center text-center px-6 relative">
                   <div
                     className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-black mb-6 relative z-10"
-                    style={{ background: '#07071a', color: '#f59e0b', boxShadow: '0 0 0 6px #fafafa' }}
+                    style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)', boxShadow: '0 0 0 6px #0d0d24' }}
                   >
                     {step.n}
                   </div>
-                  <h3 className="font-bold text-lg mb-3" style={{ color: '#07071a' }}>{step.title}</h3>
-                  <p className="text-sm leading-relaxed" style={{ color: '#6b7280' }}>{step.body}</p>
+                  <h3 className="font-bold text-lg mb-3" style={{ color: '#ffffff' }}>{step.title}</h3>
+                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>{step.body}</p>
                 </div>
               </FadeIn>
             ))}
@@ -510,14 +509,14 @@ export default function LandingPage() {
       </section>
 
       {/* ── Comparison Table ──────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#0b0b1f' }}>
         <div className="max-w-4xl mx-auto">
           <FadeIn>
             <div className="text-center mb-14">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">Competitive landscape</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">Competitive landscape</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
               >
                 Why Indian teams switch to Basha.
               </h2>
@@ -525,12 +524,12 @@ export default function LandingPage() {
           </FadeIn>
 
           <FadeIn delay={100}>
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e5e5f0' }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
             {/* Header */}
-            <div className="grid grid-cols-3 bg-white border-b" style={{ borderColor: '#e5e5f0' }}>
-              <div className="px-6 py-4 text-sm font-semibold text-gray-500">Capability</div>
+            <div className="grid grid-cols-3 border-b" style={{ background: '#0d0d28', borderColor: 'rgba(255,255,255,0.06)' }}>
+              <div className="px-6 py-4 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>Capability</div>
               <div className="px-6 py-4 text-center">
-                <span className="text-sm font-semibold text-gray-400">Fireflies · Otter · Fathom</span>
+                <span className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>Fireflies · Otter · Fathom</span>
               </div>
               <div
                 className="px-6 py-4 text-center font-bold text-sm"
@@ -544,18 +543,18 @@ export default function LandingPage() {
               <div
                 key={i}
                 className="grid grid-cols-3 border-b last:border-b-0"
-                style={{ borderColor: '#e5e5f0', background: i % 2 === 0 ? '#ffffff' : '#fafafa' }}
+                style={{ borderColor: 'rgba(255,255,255,0.06)', background: i % 2 === 0 ? '#0d0d28' : '#0f0f2e' }}
               >
-                <div className="px-6 py-4 text-sm font-medium" style={{ color: '#374151' }}>
+                <div className="px-6 py-4 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
                   {row.capability}
                 </div>
                 <div className="px-6 py-4 flex items-center justify-center">
                   {row.others ? (
-                    <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   ) : (
-                    <svg className="w-5 h-5" style={{ color: '#e5e5f0' }} fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.15)' }} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                   )}
@@ -574,25 +573,25 @@ export default function LandingPage() {
 
           </FadeIn>
 
-          <p className="text-center mt-5 text-sm" style={{ color: '#9ca3af' }}>
+          <p className="text-center mt-5 text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
             Any competitor replicating Basha's core advantage must rebuild their entire speech pipeline for India. That is not a product sprint — it is a multi-year investment.
           </p>
         </div>
       </section>
 
       {/* ── Testimonials ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ backgroundColor: '#fafafa' }}>
+      <section className="px-6 py-24" style={{ backgroundColor: '#0d0d24' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="text-center mb-14">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-600 mb-4">From Indian teams</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">From Indian teams</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#07071a' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
               >
                 What it feels like when a tool
                 <br />
-                <span className="text-gray-400">finally understands you.</span>
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>finally understands you.</span>
               </h2>
             </div>
           </FadeIn>
@@ -602,7 +601,7 @@ export default function LandingPage() {
               <FadeIn key={i} delay={i * 100}>
               <div
                 className="p-7 rounded-2xl flex flex-col gap-6 h-full"
-                style={{ background: '#f8f8fc', border: '1px solid #e8e8f0' }}
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
               >
                 <div className="flex gap-1">
                   {Array.from({ length: 5 }).map((_, s) => (
@@ -611,19 +610,19 @@ export default function LandingPage() {
                     </svg>
                   ))}
                 </div>
-                <p className="text-sm leading-relaxed flex-1" style={{ color: '#374151' }}>
+                <p className="text-sm leading-relaxed flex-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
                   &ldquo;{t.quote}&rdquo;
                 </p>
-                <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: '#e8e8f0' }}>
+                <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                    style={{ background: '#07071a', color: '#f59e0b' }}
+                    style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
                   >
                     {t.initials}
                   </div>
                   <div>
-                    <div className="text-sm font-bold" style={{ color: '#07071a' }}>{t.name}</div>
-                    <div className="text-xs" style={{ color: '#9ca3af' }}>{t.role} · {t.company}</div>
+                    <div className="text-sm font-bold" style={{ color: '#ffffff' }}>{t.name}</div>
+                    <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{t.role} · {t.company}</div>
                   </div>
                 </div>
               </div>
@@ -632,9 +631,6 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
-
-      {/* Gradient bridge: light sections → dark CTA */}
-      <div style={{ height: 80, background: 'linear-gradient(to bottom, #fafafa 0%, #07071a 100%)' }} />
 
       {/* ── CTA Banner ────────────────────────────────────────────────────── */}
       <section
