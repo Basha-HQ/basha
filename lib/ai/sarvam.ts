@@ -305,16 +305,36 @@ export async function translateToEnglish(
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
+  // Map bare ISO codes → Sarvam locale codes. Full locale codes pass through unchanged.
   const languageMap: Record<string, string> = {
     ta: 'ta-IN',
     hi: 'hi-IN',
     te: 'te-IN',
     kn: 'kn-IN',
+    ml: 'ml-IN',
+    mr: 'mr-IN',
+    bn: 'bn-IN',
+    gu: 'gu-IN',
+    pa: 'pa-IN',
+    or: 'or-IN',
     en: 'en-IN',
     auto: 'auto',
+    unknown: 'auto',
   };
 
-  const sourceLang = languageMap[sourceLanguage] ?? 'auto';
+  const sourceLang = languageMap[sourceLanguage] ?? sourceLanguage;
+
+  // Build request body — omit source_language_code when it's 'auto' to let
+  // Sarvam attempt auto-detection. If neither works, we fall back below.
+  const requestBody: Record<string, string> = {
+    input: text,
+    target_language_code: 'en-IN',
+    model: 'mayura:v1',
+    mode: 'formal',
+  };
+  if (sourceLang !== 'auto') {
+    requestBody['source_language_code'] = sourceLang;
+  }
 
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',
@@ -322,17 +342,17 @@ export async function translateToEnglish(
       'api-subscription-key': apiKey,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      input: text,
-      source_language_code: sourceLang,
-      target_language_code: 'en-IN',
-      model: 'mayura:v1',
-      mode: 'formal',
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const error = await response.text();
+    // 422 = Sarvam can't detect language — return original text rather than
+    // crashing the pipeline. The transcript is still useful as-is.
+    if (response.status === 422) {
+      console.warn(`[sarvam] Translation skipped (language undetectable, source="${sourceLanguage}"): returning original text`);
+      return text;
+    }
     throw new Error(`Sarvam translation failed: ${response.status} ${error}`);
   }
 
