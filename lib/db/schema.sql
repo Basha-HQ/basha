@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   plan_type VARCHAR(50) DEFAULT 'free' CHECK (plan_type IN ('free', 'paid')),
   preferred_languages   TEXT[]  DEFAULT '{}',
   output_language       TEXT    DEFAULT 'en',
+  output_script         TEXT    DEFAULT 'roman',
   meeting_platform      TEXT    DEFAULT 'both',
   onboarding_completed       BOOLEAN DEFAULT false,
   google_access_token        TEXT,

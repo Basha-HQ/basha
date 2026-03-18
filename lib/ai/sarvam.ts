@@ -296,6 +296,63 @@ export async function transcribeAudio(
 }
 
 /**
+ * Transliterate text into the specified output script using Sarvam AI.
+ * Calls translate(source→source) with the output_script parameter.
+ * Used to format the "original" transcript column in a readable script.
+ * Falls back to the raw text on any API error or for English/unknown source.
+ */
+export async function transliterateToScript(
+  text: string,
+  sourceLanguage: string,
+  outputScript: 'roman' | 'fully-native' | 'spoken-form-in-native'
+): Promise<string> {
+  const apiKey = process.env.SARVAM_AI_API_KEY;
+  if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
+
+  const languageMap: Record<string, string> = {
+    ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN', kn: 'kn-IN',
+    ml: 'ml-IN', mr: 'mr-IN', bn: 'bn-IN', gu: 'gu-IN',
+    pa: 'pa-IN', or: 'or-IN', en: 'en-IN',
+    auto: 'auto', unknown: 'auto',
+  };
+
+  const sourceLang = languageMap[sourceLanguage] ?? sourceLanguage;
+
+  // Skip for English/auto — already Roman, no transliteration needed
+  if (sourceLang === 'en-IN' || sourceLang === 'en' || sourceLang === 'auto') {
+    return text;
+  }
+
+  const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
+    method: 'POST',
+    headers: {
+      'api-subscription-key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: text,
+      source_language_code: sourceLang,
+      target_language_code: sourceLang,
+      output_script: outputScript,
+      model: 'mayura:v1',
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    // Sarvam may reject same-language calls — fall back to raw text
+    if (response.status === 400 || response.status === 422) {
+      console.warn(`[sarvam] Transliteration skipped (${response.status}, source="${sourceLanguage}"): returning original text`);
+      return text;
+    }
+    throw new Error(`Sarvam transliteration failed: ${response.status} ${error}`);
+  }
+
+  const data: SarvamTranslationResponse = await response.json();
+  return data.translated_text;
+}
+
+/**
  * Translate a text segment to English using Sarvam AI.
  */
 export async function translateToEnglish(
@@ -324,6 +381,11 @@ export async function translateToEnglish(
 
   const sourceLang = languageMap[sourceLanguage] ?? sourceLanguage;
 
+  // Skip translation if source is already English
+  if (sourceLang === 'en-IN' || sourceLang === 'en') {
+    return text;
+  }
+
   // Build request body — omit source_language_code when it's 'auto' to let
   // Sarvam attempt auto-detection. If neither works, we fall back below.
   const requestBody: Record<string, string> = {
@@ -351,6 +413,11 @@ export async function translateToEnglish(
     // crashing the pipeline. The transcript is still useful as-is.
     if (response.status === 422) {
       console.warn(`[sarvam] Translation skipped (language undetectable, source="${sourceLanguage}"): returning original text`);
+      return text;
+    }
+    // 400 with "must be different" = source already is the target language
+    if (response.status === 400 && error.includes('must be different')) {
+      console.warn(`[sarvam] Translation skipped (source == target, source="${sourceLanguage}"): returning original text`);
       return text;
     }
     throw new Error(`Sarvam translation failed: ${response.status} ${error}`);

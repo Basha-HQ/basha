@@ -30,6 +30,11 @@ export async function POST(
     [id, session.user.id]
   );
 
+  const userPrefs = await queryOne<{ output_script: string }>(
+    'SELECT output_script FROM users WHERE id = $1',
+    [session.user.id]
+  );
+
   if (!meeting) {
     return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
   }
@@ -65,6 +70,7 @@ export async function POST(
       audioBuffer,
       fileName,
       sourceLanguage: meeting.source_language ?? 'auto',
+      outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
     });
 
     return NextResponse.json({ success: true });

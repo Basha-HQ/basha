@@ -10,7 +10,7 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
+import { transcribeAudio, translateToEnglish, transliterateToScript, splitIntoSegments } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 
@@ -19,10 +19,11 @@ export interface ProcessingInput {
   audioBuffer: Buffer;
   fileName: string;        // e.g. "uuid.webm" — determines MIME type for Sarvam
   sourceLanguage: string;  // e.g. "ta-IN" or "auto"
+  outputScript?: 'roman' | 'fully-native' | 'spoken-form-in-native';  // default: 'roman'
 }
 
 export async function processAudioForMeeting(input: ProcessingInput): Promise<void> {
-  const { meetingId, audioBuffer, fileName, sourceLanguage } = input;
+  const { meetingId, audioBuffer, fileName, sourceLanguage, outputScript = 'roman' } = input;
 
   await query(
     `UPDATE meetings SET status = 'processing' WHERE id = $1`,
@@ -55,15 +56,22 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       sttResult.diarized_entries?.length
         ? sttResult.diarized_entries.map((e) => {
             const raw = e as unknown as Record<string, unknown>;
-            const startRaw = e.start ?? raw['start_time'] ?? raw['start_ms'];
+            const startRaw =
+              e.start ??
+              raw['start_time_seconds'] ??
+              raw['start_time'] ??
+              raw['start_ms'];
             const startSec =
               typeof startRaw === 'number' && Number.isFinite(startRaw)
                 ? startRaw > 3600 ? Math.round(startRaw / 1000) : Math.round(startRaw)
                 : 0;
+            const speaker =
+              e.speaker ??
+              (raw['speaker_id'] != null ? `SPEAKER_${raw['speaker_id']}` : null);
             return {
               text: e.transcript,
               startSeconds: startSec,
-              speaker: e.speaker ?? null,
+              speaker,
             };
           })
         : splitIntoSegments(sttResult.transcript, 0).map((s) => ({ ...s, speaker: null }));
@@ -73,10 +81,13 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       console.log('[pipeline] First segment:', JSON.stringify(segments[0]));
     }
 
-    // 3. Translate each segment + insert transcript rows
+    // 3. Transliterate + translate each segment, then insert transcript rows
     const englishSegments: string[] = [];
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
+      // original_text: transliterate to user's chosen output_script (e.g. roman Tamil)
+      const originalText = await transliterateToScript(seg.text, detectedLang, outputScript);
+      // english_text: translate to English for AI features + search
       const en = await translateToEnglish(seg.text, detectedLang);
       englishSegments.push(en);
 
@@ -84,7 +95,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
         `INSERT INTO transcripts
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [meetingId, i, seg.startSeconds, seg.text, en, seg.speaker]
+        [meetingId, i, seg.startSeconds, originalText, en, seg.speaker]
       );
     }
 

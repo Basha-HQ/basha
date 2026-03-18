@@ -60,6 +60,11 @@ export function SettingsForm() {
   const [savingOutput, setSavingOutput] = useState(false);
   const [savedOutput, setSavedOutput] = useState(false);
 
+  // Output script (how original language is rendered)
+  const [outputScript, setOutputScript] = useState<'roman' | 'fully-native' | 'spoken-form-in-native'>('roman');
+  const [savingScript, setSavingScript] = useState(false);
+  const [savedScript, setSavedScript] = useState(false);
+
   // Auto-join calendar meetings
   const [autoJoin, setAutoJoin] = useState(false);
   const [savingAutoJoin, setSavingAutoJoin] = useState(false);
@@ -74,6 +79,7 @@ export function SettingsForm() {
         setLanguages(data.preferred_languages ?? []);
         setPlatform(data.meeting_platform ?? 'both');
         setOutputLanguage(data.output_language ?? 'en');
+        setOutputScript(data.output_script ?? 'roman');
         setAutoJoin(data.auto_join_all ?? false);
       })
       .catch(() => setError('Failed to load settings'))
@@ -114,6 +120,21 @@ export function SettingsForm() {
       setSavedPlatform(true);
     } finally {
       setSavingPlatform(false);
+    }
+  }
+
+  async function saveOutputScript() {
+    setSavingScript(true);
+    setSavedScript(false);
+    try {
+      await fetch('/api/user/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ output_script: outputScript }),
+      });
+      setSavedScript(true);
+    } finally {
+      setSavingScript(false);
     }
   }
 
@@ -205,6 +226,39 @@ export function SettingsForm() {
           })}
         </div>
         <SaveButton onClick={saveLanguages} saving={savingLangs} saved={savedLangs} />
+      </SectionCard>
+
+      {/* Transcript script */}
+      <SectionCard title="Transcript Script">
+        <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          Choose how the original language appears in your transcripts. Affects new recordings only.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {([
+            { value: 'roman', label: 'Roman', desc: 'en peru Sai · Mera naam kya hai', example: 'Default — Latin script' },
+            { value: 'fully-native', label: 'Native Script', desc: 'என் பேரு சாய் · मेरा नाम क्या है', example: 'Devanagari / Tamil / Telugu…' },
+            { value: 'spoken-form-in-native', label: 'Spoken (Native)', desc: 'என் பேரு சாய் · मेरा नाम क्या है', example: 'Spoken form in native script' },
+          ] as const).map((opt) => {
+            const active = outputScript === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { setOutputScript(opt.value); setSavedScript(false); }}
+                className="flex-1 p-4 rounded-xl text-left transition-all"
+                style={{
+                  background: active ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)',
+                  border: active ? '1.5px solid rgba(245,158,11,0.5)' : '1.5px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <div className="font-semibold text-sm" style={{ color: active ? '#f59e0b' : 'rgba(255,255,255,0.75)' }}>{opt.label}</div>
+                <div className="text-xs mt-1 font-mono" style={{ color: 'rgba(255,255,255,0.4)' }}>{opt.desc}</div>
+                <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>{opt.example}</div>
+              </button>
+            );
+          })}
+        </div>
+        <SaveButton onClick={saveOutputScript} saving={savingScript} saved={savedScript} />
       </SectionCard>
 
       {/* Meeting platform */}

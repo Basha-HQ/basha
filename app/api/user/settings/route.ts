@@ -6,6 +6,7 @@ interface UserSettings {
   auto_join_all: boolean;
   preferred_languages: string[];
   output_language: string;
+  output_script: string;
   meeting_platform: string;
 }
 
@@ -17,11 +18,11 @@ export async function GET() {
   }
 
   const settings = await queryOne<UserSettings>(
-    'SELECT auto_join_all, preferred_languages, output_language, meeting_platform FROM users WHERE id = $1',
+    'SELECT auto_join_all, preferred_languages, output_language, output_script, meeting_platform FROM users WHERE id = $1',
     [session.user.id]
   );
 
-  return NextResponse.json(settings ?? { auto_join_all: false, preferred_languages: [], output_language: 'en', meeting_platform: 'both' });
+  return NextResponse.json(settings ?? { auto_join_all: false, preferred_languages: [], output_language: 'en', output_script: 'roman', meeting_platform: 'both' });
 }
 
 // PATCH /api/user/settings — update one or more user settings
@@ -32,7 +33,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const allowedFields = ['auto_join_all', 'preferred_languages', 'output_language', 'meeting_platform'] as const;
+  const allowedFields = ['auto_join_all', 'preferred_languages', 'output_language', 'output_script', 'meeting_platform'] as const;
 
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -51,7 +52,7 @@ export async function PATCH(req: NextRequest) {
   values.push(session.user.id);
   const settings = await queryOne<UserSettings>(
     `UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}
-     RETURNING auto_join_all, preferred_languages, output_language, meeting_platform`,
+     RETURNING auto_join_all, preferred_languages, output_language, output_script, meeting_platform`,
     values
   );
 

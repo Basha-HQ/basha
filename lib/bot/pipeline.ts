@@ -55,11 +55,17 @@ export async function handleRecordingReady(
       [audioBuffer, `/api/meetings/${bot.meeting_id}/audio`, bot.meeting_id]
     );
 
-    // 4. Fetch source_language for the meeting
-    const meeting = await queryOne<{ source_language: string }>(
-      'SELECT source_language FROM meetings WHERE id = $1',
-      [bot.meeting_id]
-    );
+    // 4. Fetch source_language for the meeting + user's output_script preference
+    const [meeting, userPrefs] = await Promise.all([
+      queryOne<{ source_language: string }>(
+        'SELECT source_language FROM meetings WHERE id = $1',
+        [bot.meeting_id]
+      ),
+      queryOne<{ output_script: string }>(
+        'SELECT output_script FROM users WHERE id = $1',
+        [userId]
+      ),
+    ]);
 
     // 5. Delegate to shared pipeline
     await processAudioForMeeting({
@@ -67,6 +73,7 @@ export async function handleRecordingReady(
       audioBuffer,
       fileName: `${bot.meeting_id}.${ext}`,
       sourceLanguage: meeting?.source_language ?? 'auto',
+      outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
     });
 
     await query(

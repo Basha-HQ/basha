@@ -43,6 +43,12 @@ export async function POST(req: NextRequest) {
       [meetingId, userId]
     );
 
+    // Fetch user's output_script preference
+    const userPrefs = await queryOne<{ output_script: string }>(
+      `SELECT output_script FROM users WHERE id = $1`,
+      [userId]
+    );
+
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
@@ -69,6 +75,7 @@ export async function POST(req: NextRequest) {
       audioBuffer,
       fileName,
       sourceLanguage: meeting.source_language ?? 'auto',
+      outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
     }).catch((err) => {
       console.error(`[extension/upload] Pipeline error for meeting ${meetingId}:`, err);
     });
