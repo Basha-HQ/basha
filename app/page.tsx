@@ -235,7 +235,7 @@ export default function LandingPage() {
                 <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#28c840' }} />
               </div>
               <span className="text-xs font-mono mx-auto" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                basha · product-review · tanglish
+                basha · product-review · tanglish (Tamil + English)
               </span>
             </div>
             <div className="grid grid-cols-2 divide-x divide-white/10">
