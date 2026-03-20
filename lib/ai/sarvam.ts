@@ -41,13 +41,14 @@ function mimeTypeForFile(fileName: string): string {
 async function transcribeAudioSync(
   apiKey: string,
   audioBuffer: Buffer,
-  fileName: string
+  fileName: string,
+  sttMode: string = 'transcribe'
 ): Promise<SarvamSTTResponse> {
   const formData = new FormData();
   const blob = new Blob([audioBuffer.buffer as ArrayBuffer], { type: mimeTypeForFile(fileName) });
   formData.append('file', blob, fileName);
   formData.append('model', 'saaras:v3');
-  formData.append('mode', 'transcribe');
+  formData.append('mode', sttMode);
 
   const response = await fetch(`${SARVAM_BASE_URL}/speech-to-text`, {
     method: 'POST',
@@ -68,7 +69,8 @@ async function transcribeAudioSync(
 async function transcribeAudioBatch(
   apiKey: string,
   audioBuffer: Buffer,
-  fileName: string
+  fileName: string,
+  sttMode: string = 'transcribe'
 ): Promise<SarvamSTTResponse> {
   const headers = { 'api-subscription-key': apiKey, 'Content-Type': 'application/json' };
 
@@ -79,7 +81,7 @@ async function transcribeAudioBatch(
     body: JSON.stringify({
       job_parameters: {
         model: 'saaras:v3',
-        mode: 'transcribe',
+        mode: sttMode,
         with_timestamps: true,
         with_diarization: true,
       },
@@ -274,77 +276,26 @@ async function transcribeAudioBatch(
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
-  fileName: string
+  fileName: string,
+  sttMode: string = 'transcribe'
 ): Promise<SarvamSTTResponse> {
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
   // Try sync API first — it handles WebM/Opus natively via multipart upload
   try {
-    console.log(`[sarvam] Trying sync STT for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB)`);
-    return await transcribeAudioSync(apiKey, audioBuffer, fileName);
+    console.log(`[sarvam] Trying sync STT for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB) mode=${sttMode}`);
+    return await transcribeAudioSync(apiKey, audioBuffer, fileName, sttMode);
   } catch (syncErr) {
     const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
     // If sync fails due to duration limit, fall back to batch
     if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size')) {
       console.log(`[sarvam] Sync STT rejected (likely >30s), falling back to batch: ${msg}`);
-      return transcribeAudioBatch(apiKey, audioBuffer, fileName);
+      return transcribeAudioBatch(apiKey, audioBuffer, fileName, sttMode);
     }
     // Any other sync error — re-throw
     throw syncErr;
   }
-}
-
-/**
- * Transliterate text into the specified output script using Sarvam AI.
- * Uses the /transliterate endpoint (not /translate) — supports same-language
- * script conversion (e.g. Tamil script → Roman Tamil).
- * Falls back to the raw text on any API error or for English/unknown source.
- */
-export async function transliterateToScript(
-  text: string,
-  sourceLanguage: string,
-  outputScript: 'roman' | 'fully-native' | 'spoken-form-in-native'
-): Promise<string> {
-  const apiKey = process.env.SARVAM_AI_API_KEY;
-  if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
-
-  const languageMap: Record<string, string> = {
-    ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN', kn: 'kn-IN',
-    ml: 'ml-IN', mr: 'mr-IN', bn: 'bn-IN', gu: 'gu-IN',
-    pa: 'pa-IN', or: 'or-IN', en: 'en-IN',
-    auto: 'auto', unknown: 'auto',
-  };
-
-  const sourceLang = languageMap[sourceLanguage] ?? sourceLanguage;
-
-  // Skip for English/auto — already Roman, no transliteration needed
-  if (sourceLang === 'en-IN' || sourceLang === 'en' || sourceLang === 'auto') {
-    return text;
-  }
-
-  const response = await fetch(`${SARVAM_BASE_URL}/transliterate`, {
-    method: 'POST',
-    headers: {
-      'api-subscription-key': apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      input: text,
-      source_language_code: sourceLang,
-      target_language_code: sourceLang,
-      output_script: outputScript,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.warn(`[sarvam] Transliteration failed (${response.status}, source="${sourceLanguage}"): returning original text. ${error}`);
-    return text;
-  }
-
-  const data = await response.json() as { transliterated_text?: string; translated_text?: string };
-  return data.transliterated_text ?? data.translated_text ?? text;
 }
 
 /**

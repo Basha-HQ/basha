@@ -10,7 +10,7 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { transcribeAudio, translateToEnglish, transliterateToScript, splitIntoSegments } from '@/lib/ai/sarvam';
+import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 
@@ -32,7 +32,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 
   try {
     // 1. Transcribe with Sarvam AI (WebM/Opus, MP4, WAV, MP3 all supported)
-    const sttResult = await transcribeAudio(audioBuffer, fileName);
+    // Use 'translit' mode for Roman output (Romanized text directly from STT),
+    // 'transcribe' for native script output
+    const sttMode = outputScript === 'roman' ? 'translit' : 'transcribe';
+    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode);
 
     console.log('[pipeline] STT result — transcript length:', sttResult.transcript?.length,
       '| language:', sttResult.language_code,
@@ -85,12 +88,12 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       console.log('[pipeline] First segment:', JSON.stringify(segments[0]));
     }
 
-    // 3. Transliterate + translate each segment, then insert transcript rows
+    // 3. Translate each segment, then insert transcript rows
+    // original_text comes directly from STT (already in the correct script via sttMode)
     const englishSegments: string[] = [];
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
-      // original_text: transliterate to user's chosen output_script (e.g. roman Tamil)
-      const originalText = await transliterateToScript(seg.text, detectedLang, outputScript);
+      const originalText = seg.text;
       // english_text: translate to English for AI features + search
       const en = await translateToEnglish(seg.text, detectedLang);
       englishSegments.push(en);
