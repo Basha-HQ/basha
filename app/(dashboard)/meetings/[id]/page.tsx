@@ -22,6 +22,7 @@ interface Meeting {
   audio_path: string | null;
   speaker_labels: Record<string, string> | null;
   share_token: string | null;
+  source_language: string | null;
 }
 
 interface TranscriptRow {
@@ -54,7 +55,7 @@ export default async function MeetingDetailPage({
   const userId = session!.user.id;
 
   const meeting = await queryOne<Meeting>(
-    `SELECT id, title, meeting_link, platform, status, duration, summary, created_at, completed_at, audio_path, speaker_labels, share_token
+    `SELECT id, title, meeting_link, platform, status, duration, summary, created_at, completed_at, audio_path, speaker_labels, share_token, source_language
      FROM meetings WHERE id = $1 AND user_id = $2`,
     [id, userId]
   );
@@ -243,6 +244,7 @@ export default async function MeetingDetailPage({
               knownDuration={meeting.duration ?? undefined}
               flaggedSegmentIds={flaggedSegmentIds}
               speakerLabels={meeting.speaker_labels ?? undefined}
+              sourceLanguage={meeting.source_language ?? undefined}
             />
           </div>
         )}

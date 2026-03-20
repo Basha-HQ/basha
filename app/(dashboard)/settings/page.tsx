@@ -6,32 +6,41 @@ export const metadata = { title: 'Settings — Basha' };
 export default function SettingsPage() {
   return (
     <div
-      className="min-h-screen px-4 sm:px-6 lg:px-10 py-8"
+      className="min-h-screen px-5 sm:px-8 lg:px-10 py-8"
       style={{
         background: `
-          radial-gradient(ellipse 80% 40% at 50% -10%, rgba(99,102,241,0.1) 0%, transparent 60%),
-          #07071a
+          radial-gradient(ellipse 60% 25% at 30% -5%, rgba(245,158,11,0.06) 0%, transparent 55%)
         `,
+        backgroundColor: '#07071a',
       }}
     >
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div className="mb-8">
-          <p className="text-sm font-medium mb-1" style={{ color: '#f59e0b' }}>Preferences</p>
-          <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="mb-10 animate-fade-up-1">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            Preferences
+          </p>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: 'rgba(255,255,255,0.95)' }}>
             Settings
           </h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            Manage your language preferences, meeting platform, and integrations.
+          <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
+            Language preferences, meeting platform, and integrations.
           </p>
         </div>
 
-        <SettingsForm />
+        <div className="animate-fade-up-2 space-y-6">
+          <SettingsForm />
+        </div>
 
         {/* Integrations */}
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            Integrations
-          </p>
+        <div className="mt-10 animate-fade-up-3">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>
+              Integrations
+            </p>
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          </div>
           <ExtensionIntegration />
         </div>
       </div>

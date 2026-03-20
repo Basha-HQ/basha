@@ -125,6 +125,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
               transcripts={transcripts}
               meetingTitle={meeting.title}
               speakerLabels={meeting.speaker_labels ?? undefined}
+              sourceLanguage={meeting.source_language ?? undefined}
               readOnly
             />
           )}
