@@ -297,8 +297,8 @@ export async function transcribeAudio(
 
 /**
  * Transliterate text into the specified output script using Sarvam AI.
- * Calls translate(source→source) with the output_script parameter.
- * Used to format the "original" transcript column in a readable script.
+ * Uses the /transliterate endpoint (not /translate) — supports same-language
+ * script conversion (e.g. Tamil script → Roman Tamil).
  * Falls back to the raw text on any API error or for English/unknown source.
  */
 export async function transliterateToScript(
@@ -323,7 +323,7 @@ export async function transliterateToScript(
     return text;
   }
 
-  const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
+  const response = await fetch(`${SARVAM_BASE_URL}/transliterate`, {
     method: 'POST',
     headers: {
       'api-subscription-key': apiKey,
@@ -334,22 +334,17 @@ export async function transliterateToScript(
       source_language_code: sourceLang,
       target_language_code: sourceLang,
       output_script: outputScript,
-      model: 'mayura:v1',
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    // Sarvam may reject same-language calls — fall back to raw text
-    if (response.status === 400 || response.status === 422) {
-      console.warn(`[sarvam] Transliteration skipped (${response.status}, source="${sourceLanguage}"): returning original text`);
-      return text;
-    }
-    throw new Error(`Sarvam transliteration failed: ${response.status} ${error}`);
+    console.warn(`[sarvam] Transliteration failed (${response.status}, source="${sourceLanguage}"): returning original text. ${error}`);
+    return text;
   }
 
-  const data: SarvamTranslationResponse = await response.json();
-  return data.translated_text;
+  const data = await response.json() as { transliterated_text?: string; translated_text?: string };
+  return data.transliterated_text ?? data.translated_text ?? text;
 }
 
 /**
