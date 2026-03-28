@@ -41,7 +41,7 @@ export function RotatingWord() {
   }, [phase, charIndex, word]);
 
   return (
-    <span style={{ color: '#f59e0b', display: 'inline-block', minWidth: '9.5ch' }}>
+    <span style={{ color: '#f59e0b', display: 'inline-block', minWidth: '7ch' }}>
       {displayed}
       <span className="cursor-blink" style={{ opacity: 1 }}>|</span>
     </span>

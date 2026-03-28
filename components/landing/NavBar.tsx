@@ -1,33 +1,12 @@
-'use client';
-
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { StardustButton } from '@/components/ui/stardust-button';
 
 export function NavBar() {
-  const [hidden, setHidden] = useState(false);
-
-  useEffect(() => {
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const currentY = window.scrollY;
-      setHidden(currentY > lastY && currentY > 80);
-      lastY = currentY;
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
   return (
     <div
       className="fixed top-0 left-0 right-0 z-50 w-full"
       style={{
-        transform: hidden ? 'translateY(-100%)' : 'translateY(0)',
-        transition: 'transform 0.3s ease',
-        background: 'rgba(7,7,26,0.85)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'transparent',
       }}
     >
       <nav className="flex items-center justify-between pl-6 pr-8 py-4 max-w-7xl mx-auto">
