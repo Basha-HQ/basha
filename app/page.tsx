@@ -3,7 +3,6 @@ import { RotatingWord } from '@/components/landing/RotatingWord';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { StardustButton } from '@/components/ui/stardust-button';
 import { NavBar } from '@/components/landing/NavBar';
-import { StickyCTA } from '@/components/landing/StickyCTA';
 import Link from 'next/link';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
@@ -143,7 +142,6 @@ export default function LandingPage() {
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
       <NavBar />
-      <StickyCTA />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section
@@ -168,10 +166,10 @@ export default function LandingPage() {
             className="font-bold leading-[1.08] tracking-tight mb-6"
             style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
           >
-            Your team talks in{' '}
-            <RotatingWord />
+            Speak{' '}
+            <RotatingWord />.
             <br />
-            Your meeting notes should too.
+            Get clean English notes.
           </h1>
 
           {/* Subtext */}
@@ -179,16 +177,22 @@ export default function LandingPage() {
             className="text-lg md:text-xl leading-relaxed mb-10 max-w-2xl mx-auto"
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
-            Basha records your meeting audio silently from Chrome — no bots, no invites,
-            no one knows it is running. Speak naturally in Hinglish, Tanglish, or Tamil.
-            You get two transcripts: the original, saved exactly as spoken, and a{' '}
-            <span style={{ color: '#a5b4fc' }}>clean English version</span> ready to share with anyone.
+            Silent Chrome recording. No bots. Speak naturally in Hinglish, Tanglish, or Tamil —
+            get an AI transcript in the original language plus a{' '}
+            <span style={{ color: '#a5b4fc' }}>clean English version</span> to share.
           </p>
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <StardustButton href="/signup" size="md">
-              Add to Chrome — it is free →
+              <svg className="w-4 h-4 mr-1.5 flex-shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4.5" fill="white" />
+                <path d="M12 7.5h9.47A10 10 0 0 0 2.54 7.5H12z" fill="#EA4335" />
+                <path d="M4.22 19.78 8.6 12.19A4.5 4.5 0 0 0 12 16.5l-4.38 7.59A10 10 0 0 1 4.22 19.78z" fill="#34A853" />
+                <path d="M19.78 19.78 15.4 12.19A4.5 4.5 0 0 1 12 16.5l4.38 7.59a10 10 0 0 0 3.4-4.31z" fill="#FBBC05" />
+                <path d="M12 7.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z" fill="white" />
+              </svg>
+              Add to Chrome · Free
             </StardustButton>
             <StardustButton href="#demo" size="md" variant="outline">
               See a live Tanglish transcript ↓

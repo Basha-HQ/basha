@@ -24,6 +24,10 @@ export function NavBar() {
       style={{
         transform: hidden ? 'translateY(-100%)' : 'translateY(0)',
         transition: 'transform 0.3s ease',
+        background: 'rgba(7,7,26,0.85)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}
     >
       <nav className="flex items-center justify-between pl-6 pr-8 py-4 max-w-7xl mx-auto">
