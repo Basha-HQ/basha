@@ -17,6 +17,7 @@ interface Demo {
   subtitle: string;
   accent: string;
   bgAccent: string;
+  langAttr: string;
   entries: Entry[];
 }
 
@@ -26,6 +27,7 @@ const demos: Record<TabKey, Demo> = {
     subtitle: 'Tamil + English',
     accent: '#f59e0b',
     bgAccent: 'rgba(245,158,11,0.12)',
+    langAttr: 'ta-Latn',
     entries: [
       {
         time: '10:14',
@@ -52,6 +54,7 @@ const demos: Record<TabKey, Demo> = {
     subtitle: 'Hindi + English',
     accent: '#a78bfa',
     bgAccent: 'rgba(167,139,250,0.12)',
+    langAttr: 'hi-Latn',
     entries: [
       {
         time: '14:32',
@@ -78,6 +81,7 @@ const demos: Record<TabKey, Demo> = {
     subtitle: 'Telugu + English',
     accent: '#34d399',
     bgAccent: 'rgba(52,211,153,0.12)',
+    langAttr: 'te-Latn',
     entries: [
       {
         time: '09:08',
@@ -104,6 +108,7 @@ const demos: Record<TabKey, Demo> = {
     subtitle: 'Kannada + English',
     accent: '#fb7185',
     bgAccent: 'rgba(251,113,133,0.12)',
+    langAttr: 'kn-Latn',
     entries: [
       {
         time: '11:44',
@@ -186,7 +191,7 @@ export function DemoTranscriptTabs() {
           {/* Original */}
           <div className="p-6 md:p-8">
             <div className="flex items-center gap-2 mb-6">
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.6)' }}>
                 Original
               </span>
               <span
@@ -214,7 +219,7 @@ export function DemoTranscriptTabs() {
                         {entry.time}
                       </span>
                     </div>
-                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                    <p className="text-sm leading-relaxed" lang={demo.langAttr} style={{ color: 'rgba(255,255,255,0.82)' }}>
                       {entry.original}
                     </p>
                   </div>
@@ -226,11 +231,8 @@ export function DemoTranscriptTabs() {
           {/* English translation */}
           <div className="p-6 md:p-8" style={{ background: 'rgba(99,102,241,0.04)' }}>
             <div className="flex items-center gap-2 mb-6">
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                English
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded font-medium text-indigo-300" style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.25)' }}>
-                translated
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                Clean English
               </span>
             </div>
             <div className="space-y-6">

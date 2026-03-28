@@ -34,17 +34,17 @@ const realities = [
   {
     n: '02',
     title: 'Project teams bring together speakers of different languages.',
-    body: 'In Indian enterprises, a single project regularly spans four or five states — each member fluent in English but native in something else.',
+    body: 'In Indian companies, a single project regularly spans four or five states — each member skilled in their work but native in different languages.',
   },
   {
     n: '03',
     title: 'People explain nuances better in their mother tongue.',
-    body: 'The most precise thinking happens in the language you grew up in. Risks, cultural context, subtle insights — they come out in native tongue.',
+    body: 'The risk a developer flags in Telugu is the same risk that gets lost when they translate it to English. Precision belongs to the mother tongue.',
   },
   {
     n: '04',
-    title: 'Code-switching is natural, unconscious, and unstoppable.',
-    body: 'Mixing English words into your mother tongue mid-sentence is the evolved communication style of educated, multilingual Indians.',
+    title: 'Mixing languages mid-sentence is not a habit to fix.',
+    body: 'It is how educated, multilingual Indians naturally think and talk. (Linguists call it code-switching. Indians just call it Tuesday.)',
   },
   {
     n: '05',
@@ -101,8 +101,8 @@ const usps = [
       </svg>
     ),
     tag: 'Data Moat USP',
-    title: 'Gets smarter with every Indian meeting',
-    body: 'Code-mixed Indian professional speech data is extraordinarily scarce globally. Every transcript makes Basha sharper — and widens a moat no competitor can shortcut.',
+    title: 'Gets more accurate the more Indian teams use it',
+    body: 'Indian language mixing in professional meetings is rarely recorded anywhere in the world. Every meeting that runs through Basha teaches it something other tools will never learn. The longer Indian teams use it, the better it gets — and no competitor can skip that process.',
   },
 ];
 
@@ -115,12 +115,12 @@ const steps = [
   {
     n: '2',
     title: 'Record your meeting tab',
-    body: 'Click the Basha icon in Chrome when the meeting starts. Nothing joins your call — completely invisible to other attendees.',
+    body: 'Click the Basha icon when your meeting starts. No bot account enters the room. No notification appears. Nobody knows you are recording notes.',
   },
   {
     n: '3',
     title: 'Get dual transcripts',
-    body: 'Basha captures every code-switch: Hinglish, Tanglish, Teluglish. Get the original preserved + a clean English version to share.',
+    body: 'Get two transcripts. The original — every language shift saved exactly as spoken. And a clean English version, ready to drop into Notion, Jira, or an email. Both ready within minutes.',
   },
 ];
 
@@ -131,32 +131,9 @@ const comparison = [
   { capability: 'Code-mixed speech (Hinglish, Tanglish…)', basha: true, others: false },
   { capability: 'Dual output: original + English', basha: true, others: false },
   { capability: 'Built for Indian professional context', basha: true, others: false },
-  { capability: 'Indic speech training data', basha: true, others: false },
+  { capability: 'Indian language training data', basha: true, others: false },
 ];
 
-const testimonials = [
-  {
-    quote: "Finally, a tool that doesn't make me feel like I'm communicating incorrectly. My team switches between Tamil and English every few minutes — Basha just gets it.",
-    name: 'Meera Krishnan',
-    role: 'Product Manager',
-    company: 'Series B startup, Bengaluru',
-    initials: 'MK',
-  },
-  {
-    quote: "We were using Otter.ai but half our stand-ups are in Hinglish. The transcripts were garbage. Basha gives us something we can actually share with leadership.",
-    name: 'Arjun Kapoor',
-    role: 'Engineering Lead',
-    company: 'Fintech, Mumbai',
-    initials: 'AK',
-  },
-  {
-    quote: "Our sales calls with regional clients are entirely in Telugu mixed with English. Basha captures every word and translates cleanly. It's changed how we document deals.",
-    name: 'Lakshmi Patel',
-    role: 'Sales Director',
-    company: 'Enterprise SaaS, Hyderabad',
-    initials: 'LP',
-  },
-];
 
 /* ─── Page ──────────────────────────────────────────────────────────────── */
 
@@ -183,19 +160,18 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto text-center">
           {/* Eyebrow */}
           <div className="inline-flex items-center gap-2 mb-8 px-4 py-2 rounded-full text-sm font-semibold" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
-            <span>🇮🇳</span>
-            The AI Meeting Notetaker Built for India
+            Basha · बाषा · மொழி · భాష · <em>language.</em>
           </div>
 
           {/* H1 */}
           <h1
             className="font-bold leading-[1.08] tracking-tight mb-6"
-            style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)', color: '#ffffff' }}
+            style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
           >
-            Your meetings speak{' '}
+            Your team talks in{' '}
             <RotatingWord />
             <br />
-            Now your notes do too.
+            Your meeting notes should too.
           </h1>
 
           {/* Subtext */}
@@ -203,18 +179,19 @@ export default function LandingPage() {
             className="text-lg md:text-xl leading-relaxed mb-10 max-w-2xl mx-auto"
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
-            Records your tab audio silently — no bots, no invites, no attendee list entries.
-            Speak naturally in Hinglish, Tanglish, or Tamil. Get two transcripts: the original
-            preserved in full, and a clean English version ready to share.
+            Basha records your meeting audio silently from Chrome — no bots, no invites,
+            no one knows it is running. Speak naturally in Hinglish, Tanglish, or Tamil.
+            You get two transcripts: the original, saved exactly as spoken, and a{' '}
+            <span style={{ color: '#a5b4fc' }}>clean English version</span> ready to share with anyone.
           </p>
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <StardustButton href="/signup" size="md">
-              Start for free →
+              Add to Chrome — it is free →
             </StardustButton>
             <StardustButton href="#demo" size="md" variant="outline">
-              See it in action ↓
+              See a live Tanglish transcript ↓
             </StardustButton>
           </div>
 
@@ -226,6 +203,8 @@ export default function LandingPage() {
               borderBottom: 'none',
               background: '#0d0d22',
               boxShadow: '0 -20px 80px rgba(99,102,241,0.15), 0 0 0 1px rgba(255,255,255,0.05)',
+              WebkitMaskImage: 'linear-gradient(to bottom, black 55%, transparent 100%)',
+              maskImage: 'linear-gradient(to bottom, black 55%, transparent 100%)',
             }}
           >
             <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }}>
@@ -238,7 +217,7 @@ export default function LandingPage() {
                 basha · product-review · tanglish (Tamil + English)
               </span>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-white/10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 divide-x divide-white/10">
               <div className="p-4 text-left space-y-3">
                 <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#f59e0b80' }}>Original</div>
                 {[
@@ -290,7 +269,7 @@ export default function LandingPage() {
               style={
                 lang.mixed
                   ? { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }
-                  : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.1)' }
+                  : { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.1)' }
               }
             >
               {lang.mixed && <span className="text-xs">✦</span>}
@@ -299,6 +278,64 @@ export default function LandingPage() {
           ))}
         </div>
       </div>
+
+      {/* ── 20/80 Insight ─────────────────────────────────────────────────── */}
+      <section className="px-6 py-24" style={{ backgroundColor: '#0d0d24' }}>
+        <div className="max-w-6xl mx-auto">
+          <FadeIn>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 lg:gap-16 items-start">
+              {/* Left — stat stack */}
+              <div className="lg:col-span-3">
+                <div
+                  className="font-bold mb-4 leading-none"
+                  style={{ fontSize: 'clamp(5rem, 12vw, 9rem)', color: '#f59e0b', fontFamily: 'var(--font-display)' }}
+                >
+                  80%
+                </div>
+                <p className="text-xl font-semibold mb-6" style={{ color: '#ffffff' }}>
+                  of India's technical teams are from regional-medium schools.
+                </p>
+                <p className="text-base leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  They are equally capable.
+                </p>
+                <p className="text-base leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  They think in their mother tongue.
+                </p>
+                <p className="text-base leading-relaxed font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                  Every English-only meeting tool has been silencing them.
+                </p>
+              </div>
+              {/* Right — narrative */}
+              <div className="lg:col-span-2 space-y-5 lg:pt-4">
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  Every major meeting notes tool — Otter, Fireflies, Fathom, Zoom Notes — was built by
+                  American companies for meetings where everyone speaks one language fluently.
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  In India, client meetings default to English. The 20% who are fully fluent run the room.
+                  The 80% — equally skilled, natively multilingual — participate in a language that is
+                  not their strongest.
+                </p>
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                  Their ideas come out smaller than they are. Their risks get softened in translation.
+                  Their notes are pale shadows of what was actually said.
+                </p>
+                <p className="text-sm leading-relaxed font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  Basha was built for the 80%.
+                </p>
+              </div>
+            </div>
+            {/* Closing statement */}
+            <div className="mt-14 pt-8 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+              <p className="text-base max-w-3xl" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Both groups already use English tools for tasks — Jira, Figma, email, Notion.
+                Regional language is for thinking, arguing, explaining, and deciding in real time.
+                That is where the real work happens. That is what Basha captures.
+              </p>
+            </div>
+          </FadeIn>
+        </div>
+      </section>
 
       {/* ── Demo Transcripts ──────────────────────────────────────────────── */}
       <section
@@ -313,16 +350,16 @@ export default function LandingPage() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest mb-5"
                 style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}
               >
-                ★ No competitor offers this
+                ★ The proof
               </div>
               <h2
                 className="font-bold leading-tight mb-4"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
               >
-                See it before you believe it.
+                This is what that 80% sounds like.
               </h2>
               <p className="text-lg max-w-xl mx-auto" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                Real code-mixed Indian meetings. Real Basha output. Choose your dialect.
+                Real Tanglish, Hinglish, Teluglish, and Kanglish meetings. Every language shift saved. Every word translated into clean English.
               </p>
             </div>
           </FadeIn>
@@ -338,14 +375,14 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto">
           <FadeIn>
             <div className="max-w-2xl mb-16">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">The Reality</p>
+              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">Why this exists</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
               >
                 Every meeting tool was built for English.
                 <br />
-                <span style={{ color: 'rgba(255,255,255,0.35)' }}>India doesn't work that way.</span>
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>India never did.</span>
               </h2>
             </div>
           </FadeIn>
@@ -387,7 +424,10 @@ export default function LandingPage() {
                     The Basha Promise
                   </div>
                   <p className="font-semibold text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                    Basha bridges language gaps in Indian meetings without disrupting them — bringing every participant to the same table, documented in English, without asking anyone to communicate as someone they are not.
+                    Basha doesn&apos;t ask you to change how you speak. It changes what the transcript can hold. Every language shift captured. Every nuance saved. Clean English output ready for whoever needs it.
+                  </p>
+                  <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    The word &ldquo;Basha&rdquo; means language — in Tamil, Malayalam, and across the Dravidian south. We named it that on purpose.
                   </p>
                 </div>
                 <div className="mt-8 text-sm font-bold" style={{ color: '#f59e0b' }}>
@@ -407,12 +447,26 @@ export default function LandingPage() {
               <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">What makes Basha different</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
               >
-                Five structural advantages
+                Five things Basha does
                 <br />
-                <span style={{ color: 'rgba(255,255,255,0.35)' }}>no competitor can replicate.</span>
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>that no other tool can.</span>
               </h2>
+            </div>
+          </FadeIn>
+
+          <FadeIn>
+            <div className="text-center mb-12 py-8 border-y" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+              <div
+                className="font-bold mb-2"
+                style={{ fontSize: 'clamp(4rem, 10vw, 6rem)', color: '#f59e0b', fontFamily: 'var(--font-display)', lineHeight: 1 }}
+              >
+                67M+
+              </div>
+              <p className="text-lg" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Indian professionals. Zero tools built for them. Until now.
+              </p>
             </div>
           </FadeIn>
 
@@ -445,23 +499,6 @@ export default function LandingPage() {
               </FadeIn>
             ))}
 
-            {/* Extra stat card */}
-            <FadeIn delay={usps.length * 80}>
-              <div
-                className="p-7 rounded-2xl flex flex-col justify-between h-full"
-                style={{ background: 'linear-gradient(135deg, #07071a 0%, #1e1b4b 100%)', border: '1px solid #2d2a5e' }}
-              >
-                <div>
-                  <div className="text-5xl font-black mb-3" style={{ color: '#f59e0b' }}>67M+</div>
-                  <p className="text-white/70 text-sm leading-relaxed">
-                    Indian knowledge workers running daily video meetings in code-mixed speech — with no tool built for them.
-                  </p>
-                </div>
-                <div className="mt-6 text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(245,158,11,0.7)' }}>
-                  An untapped market
-                </div>
-              </div>
-            </FadeIn>
           </div>
         </div>
       </section>
@@ -474,7 +511,7 @@ export default function LandingPage() {
               <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">How it works</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
               >
                 From install to dual transcript
                 <br />
@@ -516,118 +553,72 @@ export default function LandingPage() {
               <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">Competitive landscape</p>
               <h2
                 className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
+                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
               >
-                Why Indian teams switch to Basha.
+                What Basha does that other tools cannot.
               </h2>
             </div>
           </FadeIn>
 
           <FadeIn delay={100}>
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div role="table" aria-label="Capability comparison between Basha and competitors" className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
             {/* Header */}
-            <div className="grid grid-cols-3 border-b" style={{ background: '#0d0d28', borderColor: 'rgba(255,255,255,0.06)' }}>
-              <div className="px-6 py-4 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>Capability</div>
-              <div className="px-6 py-4 text-center">
-                <span className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>Fireflies · Otter · Fathom</span>
-              </div>
-              <div
-                className="px-6 py-4 text-center font-bold text-sm"
-                style={{ background: '#07071a', color: '#f59e0b' }}
-              >
-                Basha
+            <div role="rowgroup">
+              <div role="row" className="grid grid-cols-3 border-b" style={{ background: '#0d0d28', borderColor: 'rgba(255,255,255,0.06)' }}>
+                <div role="columnheader" className="px-6 py-4 text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.65)' }}>Capability</div>
+                <div role="columnheader" className="px-6 py-4 text-center">
+                  <span className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Fireflies · Otter · Fathom</span>
+                </div>
+                <div
+                  role="columnheader"
+                  className="px-6 py-4 text-center font-bold text-sm"
+                  style={{ background: '#07071a', color: '#f59e0b' }}
+                >
+                  Basha
+                </div>
               </div>
             </div>
 
+            <div role="rowgroup">
             {comparison.map((row, i) => (
               <div
                 key={i}
+                role="row"
                 className="grid grid-cols-3 border-b last:border-b-0"
                 style={{ borderColor: 'rgba(255,255,255,0.06)', background: i % 2 === 0 ? '#0d0d28' : '#0f0f2e' }}
               >
-                <div className="px-6 py-4 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                <div role="rowheader" className="px-6 py-4 text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
                   {row.capability}
                 </div>
-                <div className="px-6 py-4 flex items-center justify-center">
+                <div role="cell" className="px-6 py-4 flex items-center justify-center">
                   {row.others ? (
-                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                    <svg aria-label="Yes" className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   ) : (
-                    <svg className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.15)' }} fill="currentColor" viewBox="0 0 20 20">
+                    <svg aria-label="No" className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.25)' }} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                   )}
                 </div>
                 <div
+                  role="cell"
                   className="px-6 py-4 flex items-center justify-center"
                   style={{ background: i % 2 === 0 ? '#07071a' : '#090914' }}
                 >
-                  <svg className="w-5 h-5" style={{ color: '#f59e0b' }} fill="currentColor" viewBox="0 0 20 20">
+                  <svg aria-label="Yes" className="w-5 h-5" style={{ color: '#f59e0b' }} fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </div>
               </div>
             ))}
+            </div>
           </div>
 
           </FadeIn>
 
-          <p className="text-center mt-5 text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
-            Any competitor replicating Basha's core advantage must rebuild their entire speech pipeline for India. That is not a product sprint — it is a multi-year investment.
-          </p>
-        </div>
-      </section>
-
-      {/* ── Testimonials ──────────────────────────────────────────────────── */}
-      <section className="px-6 py-24" style={{ backgroundColor: '#0d0d24' }}>
-        <div className="max-w-6xl mx-auto">
-          <FadeIn>
-            <div className="text-center mb-14">
-              <p className="text-sm font-bold uppercase tracking-widest text-indigo-400 mb-4">From Indian teams</p>
-              <h2
-                className="font-bold leading-tight"
-                style={{ fontSize: 'clamp(1.9rem, 4vw, 3rem)', color: '#ffffff' }}
-              >
-                What it feels like when a tool
-                <br />
-                <span style={{ color: 'rgba(255,255,255,0.35)' }}>finally understands you.</span>
-              </h2>
-            </div>
-          </FadeIn>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <FadeIn key={i} delay={i * 100}>
-              <div
-                className="p-7 rounded-2xl flex flex-col gap-6 h-full"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                <div className="flex gap-1">
-                  {Array.from({ length: 5 }).map((_, s) => (
-                    <svg key={s} className="w-4 h-4" style={{ color: '#f59e0b' }} fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  ))}
-                </div>
-                <p className="text-sm leading-relaxed flex-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-                <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                    style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
-                  >
-                    {t.initials}
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold" style={{ color: '#ffffff' }}>{t.name}</div>
-                    <div className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{t.role} · {t.company}</div>
-                  </div>
-                </div>
-              </div>
-              </FadeIn>
-            ))}
+          <div className="mt-5 px-6 py-4 rounded-xl text-sm font-medium" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', color: 'rgba(255,255,255,0.7)' }}>
+            Could another tool just add Indian language support tomorrow? No — they would need to rebuild their core speech engine from scratch. That takes years, not months. Basha has been building this from day one.
           </div>
         </div>
       </section>
@@ -643,8 +634,8 @@ export default function LandingPage() {
         <FadeIn>
           <div className="max-w-3xl mx-auto">
             <h2
-              className="font-black leading-tight mb-5"
-              style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: '#ffffff' }}
+              className="font-bold leading-tight mb-5"
+              style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: '#ffffff', fontFamily: 'var(--font-display)' }}
             >
               One meeting.
               <br />
@@ -652,11 +643,14 @@ export default function LandingPage() {
               <br />
               <span style={{ color: '#f59e0b' }}>Zero language gaps.</span>
             </h2>
-            <p className="text-lg mb-10" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Join Indian teams who speak naturally and document clearly.
+            <p className="text-lg mb-6" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Join PMs, founders, and engineers across India who stopped losing their best ideas to a notes tool that did not understand them.
+            </p>
+            <p className="text-base font-semibold mb-10" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              Basha means language. We built it for yours.
             </p>
             <StardustButton href="/signup" size="lg">
-              Get started free →
+              Add to Chrome — it is free →
             </StardustButton>
             <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
               No credit card required · No bot joining your meeting · Chrome extension
@@ -679,7 +673,7 @@ export default function LandingPage() {
               B
             </div>
             <span className="font-bold text-white">Basha</span>
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Built for India. Built for how India speaks.</span>
+            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Basha (बाषा · மொழி · భాష) — language. Built for India. Built for how India speaks.</span>
           </div>
           <div className="flex items-center gap-6 text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>
             <a href="#" className="hover:text-white transition-colors">Features</a>
