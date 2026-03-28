@@ -3,6 +3,7 @@ import { RotatingWord } from '@/components/landing/RotatingWord';
 import { FadeIn } from '@/components/ui/FadeIn';
 import { StardustButton } from '@/components/ui/stardust-button';
 import { NavBar } from '@/components/landing/NavBar';
+import { StickyCTA } from '@/components/landing/StickyCTA';
 import Link from 'next/link';
 
 /* ─── Data ─────────────────────────────────────────────────────────────── */
@@ -142,6 +143,7 @@ export default function LandingPage() {
 
       {/* ── Nav ───────────────────────────────────────────────────────────── */}
       <NavBar />
+      <StickyCTA />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section
@@ -308,32 +310,25 @@ export default function LandingPage() {
                   80%
                 </div>
                 <p className="text-xl font-semibold mb-6" style={{ color: '#ffffff' }}>
-                  of India's technical teams are from regional-medium schools.
+                  of India&apos;s tech workforce thinks in a regional language.
                 </p>
                 <p className="text-base leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
                   They are equally capable.
                 </p>
-                <p className="text-base leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                  They think in their mother tongue.
-                </p>
                 <p className="text-base leading-relaxed font-semibold" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                  Every English-only meeting tool has been silencing them.
+                  But every English-only meeting tool ignores them.
                 </p>
               </div>
               {/* Right — narrative */}
               <div className="lg:col-span-2 space-y-5 lg:pt-4">
                 <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  Every major meeting notes tool — Otter, Fireflies, Fathom, Zoom Notes — was built by
-                  American companies for meetings where everyone speaks one language fluently.
+                  Otter, Fireflies, Fathom — every major meeting tool assumes everyone in the room speaks one language fluently.
                 </p>
                 <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  In India, client meetings default to English. The 20% who are fully fluent run the room.
-                  The 80% — equally skilled, natively multilingual — participate in a language that is
-                  not their strongest.
+                  In Indian meetings, that is rarely true. The 20% who are fluent in English dominate. The 80% hold back — not because they lack ideas, but because they are forced to think in one language and speak in another.
                 </p>
                 <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  Their ideas come out smaller than they are. Their risks get softened in translation.
-                  Their notes are pale shadows of what was actually said.
+                  Their best points get lost. Their concerns get diluted. Their notes miss what was actually said.
                 </p>
                 <p className="text-sm leading-relaxed font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
                   Basha was built for the 80%.
@@ -343,9 +338,7 @@ export default function LandingPage() {
             {/* Closing statement */}
             <div className="mt-14 pt-8 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <p className="text-base max-w-3xl" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                Both groups already use English tools for tasks — Jira, Figma, email, Notion.
-                Regional language is for thinking, arguing, explaining, and deciding in real time.
-                That is where the real work happens. That is what Basha captures.
+                Your team already works in English — Jira, Figma, email, Notion. But real decisions happen in Hinglish, Tanglish, and Kannada-English. That messy, multilingual conversation is where the actual work lives. Basha captures all of it and gives you clean English notes.
               </p>
             </div>
           </FadeIn>
@@ -402,25 +395,47 @@ export default function LandingPage() {
             </div>
           </FadeIn>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {realities.map((r, i) => (
               <FadeIn key={r.n} delay={i * 80}>
                 <div
-                  className="relative p-7 rounded-2xl overflow-hidden group transition-all duration-300 hover:-translate-y-1 h-full"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  className="group relative rounded-2xl p-px overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 h-full"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0) 50%, rgba(245,158,11,0.08) 100%)',
+                  }}
                 >
                   <div
-                    className="absolute top-4 right-5 font-black text-6xl leading-none select-none"
-                    style={{ color: 'rgba(245,158,11,0.13)', fontVariantNumeric: 'tabular-nums' }}
+                    className="relative rounded-[15px] p-8 h-full overflow-hidden"
+                    style={{
+                      background: 'linear-gradient(145deg, rgba(13,13,36,0.95) 0%, rgba(7,7,26,0.98) 100%)',
+                    }}
                   >
-                    {r.n}
+                    {/* Hover glow */}
+                    <div
+                      className="pointer-events-none absolute -top-24 -left-24 h-48 w-48 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                      style={{
+                        background: 'radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%)',
+                      }}
+                    />
+                    <span
+                      className="absolute top-6 right-7 font-black text-5xl leading-none select-none"
+                      style={{
+                        background: 'linear-gradient(180deg, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.04) 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {r.n}
+                    </span>
+                    <h3 className="font-semibold text-[15px] leading-snug tracking-tight mb-3 pr-8 relative" style={{ color: 'rgba(255,255,255,0.95)' }}>
+                      {r.title}
+                    </h3>
+                    <p className="text-sm leading-relaxed mt-3 relative" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      {r.body}
+                    </p>
                   </div>
-                  <h3 className="font-bold text-base leading-snug mb-3 pr-8 relative" style={{ color: '#ffffff' }}>
-                    {r.title}
-                  </h3>
-                  <p className="text-sm leading-relaxed relative" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    {r.body}
-                  </p>
                 </div>
               </FadeIn>
             ))}
@@ -428,25 +443,47 @@ export default function LandingPage() {
             {/* Promise card */}
             <FadeIn delay={realities.length * 80}>
               <div
-                className="relative p-7 rounded-2xl overflow-hidden md:col-span-2 lg:col-span-1 flex flex-col justify-between h-full"
-                style={{ backgroundColor: '#07071a' }}
+                className="group relative rounded-2xl p-px overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 h-full"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(245,158,11,0.25) 0%, rgba(245,158,11,0.05) 40%, rgba(245,158,11,0.15) 100%)',
+                }}
               >
-                <div>
+                <div
+                  className="relative rounded-[15px] p-8 h-full overflow-hidden flex flex-col justify-between"
+                  style={{
+                    background: 'linear-gradient(145deg, rgba(13,13,36,0.95) 0%, rgba(7,7,26,0.98) 100%)',
+                  }}
+                >
+                  {/* Ambient glows — always visible */}
                   <div
-                    className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full mb-5"
-                    style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}
-                  >
-                    The Basha Promise
+                    className="pointer-events-none absolute -top-32 -left-32 h-64 w-64 rounded-full"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(245,158,11,0.06) 0%, transparent 70%)',
+                    }}
+                  />
+                  <div
+                    className="pointer-events-none absolute -bottom-20 -right-20 h-48 w-48 rounded-full"
+                    style={{
+                      background: 'radial-gradient(circle, rgba(245,158,11,0.04) 0%, transparent 70%)',
+                    }}
+                  />
+                  <div>
+                    <span
+                      className="inline-block text-[11px] font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full mb-5"
+                      style={{ color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}
+                    >
+                      The Basha Promise
+                    </span>
+                    <p className="font-semibold text-base leading-relaxed relative" style={{ color: 'rgba(255,255,255,0.95)' }}>
+                      Basha doesn&apos;t ask you to change how you speak. It changes what the transcript can hold. Every language shift captured. Every nuance saved. Clean English output ready for whoever needs it.
+                    </p>
+                    <p className="text-sm mt-4 relative" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      The word &ldquo;Basha&rdquo; means language — in Tamil, Malayalam, and across the Dravidian south. We named it that on purpose.
+                    </p>
                   </div>
-                  <p className="font-semibold text-base leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                    Basha doesn&apos;t ask you to change how you speak. It changes what the transcript can hold. Every language shift captured. Every nuance saved. Clean English output ready for whoever needs it.
-                  </p>
-                  <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    The word &ldquo;Basha&rdquo; means language — in Tamil, Malayalam, and across the Dravidian south. We named it that on purpose.
-                  </p>
-                </div>
-                <div className="mt-8 text-sm font-bold" style={{ color: '#f59e0b' }}>
-                  Basha — Built for India. Built for how India speaks.
+                  <div className="mt-8 text-sm font-medium relative" style={{ color: 'rgba(245,158,11,0.8)' }}>
+                    Basha — Built for India. Built for how India speaks.
+                  </div>
                 </div>
               </div>
             </FadeIn>
@@ -665,6 +702,24 @@ export default function LandingPage() {
               Basha means language. We built it for yours.
             </p>
             <StardustButton href="/signup" size="lg">
+              <svg className="w-5 h-5 mr-1.5 flex-shrink-0" viewBox="0 0 48 48" aria-hidden="true">
+                <defs>
+                  <linearGradient id="chrome-red-2" x1="3.2173" y1="15" x2="44.7812" y2="15" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#d93025"/><stop offset="1" stopColor="#ea4335"/>
+                  </linearGradient>
+                  <linearGradient id="chrome-yellow-2" x1="20.7219" y1="47.6791" x2="41.5039" y2="11.6837" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#fcc934"/><stop offset="1" stopColor="#fbbc04"/>
+                  </linearGradient>
+                  <linearGradient id="chrome-green-2" x1="26.5981" y1="46.5015" x2="5.8161" y2="10.506" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#1e8e3e"/><stop offset="1" stopColor="#34a853"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="24" cy="23.9947" r="12" fill="#fff"/>
+                <path d="M24,12H44.7812a23.9939,23.9939,0,0,0-41.5639.0029L13.6079,30l.0093-.0024A11.9852,11.9852,0,0,1,24,12Z" fill="url(#chrome-red-2)"/>
+                <circle cx="24" cy="24" r="9.5" fill="#1a73e8"/>
+                <path d="M34.3913,30.0029,24.0007,48A23.994,23.994,0,0,0,44.78,12.0031H23.9989l-.0025.0093A11.985,11.985,0,0,1,34.3913,30.0029Z" fill="url(#chrome-yellow-2)"/>
+                <path d="M13.6086,30.0031,3.218,12.006A23.994,23.994,0,0,0,24.0025,48L34.3931,30.0029l-.0067-.0068a11.9852,11.9852,0,0,1-20.7778.007Z" fill="url(#chrome-green-2)"/>
+              </svg>
               Add to Chrome — it is free →
             </StardustButton>
             <p className="mt-4 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
