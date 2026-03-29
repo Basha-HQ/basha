@@ -33,7 +33,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Integrations */}
-        <div className="mt-10 animate-fade-up-3">
+        <div id="integrations" className="mt-10 animate-fade-up-3">
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>

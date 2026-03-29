@@ -65,7 +65,7 @@ export default function ExtensionInstallBanner() {
       <ul className="space-y-2">
         {[
           { icon: '🎙', text: 'Captures tab audio directly — invisible to other participants' },
-          { icon: '₹0', text: 'Zero per-meeting cost — only Sarvam AI transcription applies' },
+          { icon: '₹0', text: 'Free to record — no per-meeting cost' },
           { icon: '🔒', text: 'Audio never leaves your browser until you stop recording' },
         ].map(({ icon, text }) => (
           <li key={text} className="flex items-start gap-2 text-xs text-slate-400">
@@ -84,9 +84,6 @@ export default function ExtensionInstallBanner() {
         Add to Chrome — it&apos;s free
       </a>
 
-      <p className="text-xs text-slate-600 text-center">
-        Chrome Web Store · 1–3 day review after install
-      </p>
     </div>
   );
 }

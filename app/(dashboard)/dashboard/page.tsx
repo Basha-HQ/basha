@@ -14,7 +14,7 @@ interface Meeting {
   source_language: string | null;
 }
 
-export const metadata = { title: 'Dashboard — LinguaMeet' };
+export const metadata = { title: 'Dashboard — Basha' };
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -101,7 +101,7 @@ export default async function DashboardPage() {
             </h1>
             <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
               {Number(stats?.total ?? 0) === 0
-                ? 'Start your first meeting to see notes here'
+                ? 'Your first Tanglish transcript is one meeting away.'
                 : `${stats?.total} meeting${Number(stats?.total) !== 1 ? 's' : ''} transcribed so far`}
             </p>
           </div>

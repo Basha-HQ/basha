@@ -36,14 +36,14 @@ export function DoneStep({ onBack, saving, error, onRetry }: Props) {
           B
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">
-          {saving ? 'Setting up your account…' : error ? 'Something went wrong' : "You're ready to record"}
+          {saving ? 'Setting up your account…' : error ? 'Something went wrong' : 'One step left'}
         </h2>
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
           {saving
             ? 'Saving your preferences'
             : error
             ? 'We couldn\u2019t save your preferences. Please try again.'
-            : 'Start on the free plan — no credit card required.'}
+            : 'Install the Basha Chrome extension to start recording.'}
         </p>
       </div>
 
@@ -111,11 +111,11 @@ export function DoneStep({ onBack, saving, error, onRetry }: Props) {
 
           {/* CTAs */}
           <button
-            onClick={() => { window.location.href = '/new-meeting'; }}
+            onClick={() => { window.location.href = '/settings#integrations'; }}
             className="block w-full text-center py-3.5 rounded-xl font-bold text-sm mb-3 btn-amber-shimmer"
             style={{ color: '#07071a' }}
           >
-            Record my first meeting →
+            Set up Chrome Extension →
           </button>
           <button
             onClick={() => { window.location.href = '/dashboard'; }}

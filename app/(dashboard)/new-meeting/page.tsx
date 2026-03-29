@@ -22,39 +22,13 @@ const HOW_IT_WORKS_EXTENSION = [
   {
     icon: '📝',
     title: 'Get your transcript',
-    desc: 'Sarvam AI processes your Hinglish, Tanglish, or Tamil recording instantly.',
+    desc: 'Basha transcribes your Hinglish, Tanglish, or Tamil in the original language — plus a clean English version.',
     color: '#34d399',
     colorBg: 'rgba(52,211,153,0.1)',
     colorBorder: 'rgba(52,211,153,0.2)',
   },
 ];
 
-const HOW_IT_WORKS_BOT = [
-  {
-    icon: '🔗',
-    title: 'Paste your meeting link',
-    desc: 'Works with Google Meet, Zoom, and MS Teams. No Chrome extension required.',
-    color: '#6366f1',
-    colorBg: 'rgba(99,102,241,0.12)',
-    colorBorder: 'rgba(99,102,241,0.2)',
-  },
-  {
-    icon: '🤖',
-    title: 'Bot joins & records',
-    desc: 'A silent bot joins your call and captures audio. Other participants will see it.',
-    color: '#f59e0b',
-    colorBg: 'rgba(245,158,11,0.1)',
-    colorBorder: 'rgba(245,158,11,0.2)',
-  },
-  {
-    icon: '📝',
-    title: 'Get multilingual notes',
-    desc: 'Sarvam AI transcribes Hinglish, Tanglish & more — same pipeline, same quality.',
-    color: '#34d399',
-    colorBg: 'rgba(52,211,153,0.1)',
-    colorBorder: 'rgba(52,211,153,0.2)',
-  },
-];
 
 export default function NewMeetingPage() {
   return (
@@ -120,48 +94,11 @@ export default function NewMeetingPage() {
 
               <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
                 <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  Powered by{' '}
-                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>Sarvam AI</span> for STT &amp; translation.
+                  Supports Google Meet, Zoom, and Microsoft Teams.
                 </p>
               </div>
             </div>
 
-            {/* Bot tab hint */}
-            <div
-              className="rounded-2xl p-5"
-              style={{
-                background: 'rgba(245,158,11,0.03)',
-                border: '1px solid rgba(245,158,11,0.1)',
-              }}
-            >
-              <p className="text-xs font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(245,158,11,0.4)' }}>
-                Bot backup — how it works
-              </p>
-              <div className="space-y-5">
-                {HOW_IT_WORKS_BOT.map((item, i) => (
-                  <div key={i} className="flex gap-3.5">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                      style={{ background: item.colorBg, border: `1px solid ${item.colorBorder}` }}
-                    >
-                      {item.icon}
-                    </div>
-                    <div className="pt-0.5">
-                      <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>{item.title}</p>
-                      <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(245,158,11,0.1)' }}>
-                <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  Powered by{' '}
-                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>Recall.ai</span> for meeting bots
-                  and <span style={{ color: 'rgba(255,255,255,0.6)' }}>Sarvam AI</span> for transcription.
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       </div>

@@ -142,7 +142,7 @@ export default function ExtensionStatusCard({ meetingId, onCancel }: Props) {
       </div>
 
       <p className="text-xs text-slate-600 text-center">
-        Sarvam AI is processing your Hinglish / Tanglish recording
+        Basha is transcribing your recording
       </p>
     </div>
   );

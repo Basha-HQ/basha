@@ -109,18 +109,18 @@ const usps = [
 const steps = [
   {
     n: '1',
-    title: 'Install Basha for Chrome',
-    body: 'One click from the Chrome Web Store. Works with Google Meet, Zoom, and Teams. No account needed yet.',
+    title: 'Create your free account',
+    body: 'Takes 30 seconds. Your account connects the extension to your transcripts — no credit card needed.',
   },
   {
     n: '2',
-    title: 'Record your meeting tab',
-    body: 'Click the Basha icon when your meeting starts. No bot account enters the room. No notification appears. Nobody knows you are recording notes.',
+    title: 'Install Basha for Chrome',
+    body: 'One click from the Chrome Web Store. Works with Google Meet, Zoom, and Teams.',
   },
   {
     n: '3',
     title: 'Get dual transcripts',
-    body: 'Get two transcripts. The original — every language shift saved exactly as spoken. And a clean English version, ready to drop into Notion, Jira, or an email. Both ready within minutes.',
+    body: 'Click the Basha icon when your meeting starts — no bot joins the call. Get the original language transcript plus a clean English version within minutes.',
   },
 ];
 
@@ -187,25 +187,7 @@ export default function LandingPage() {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <StardustButton href="/signup" size="md">
-              <svg className="w-5 h-5 mr-1.5 flex-shrink-0" viewBox="0 0 48 48" aria-hidden="true">
-                <defs>
-                  <linearGradient id="chrome-red" x1="3.2173" y1="15" x2="44.7812" y2="15" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#d93025"/><stop offset="1" stopColor="#ea4335"/>
-                  </linearGradient>
-                  <linearGradient id="chrome-yellow" x1="20.7219" y1="47.6791" x2="41.5039" y2="11.6837" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#fcc934"/><stop offset="1" stopColor="#fbbc04"/>
-                  </linearGradient>
-                  <linearGradient id="chrome-green" x1="26.5981" y1="46.5015" x2="5.8161" y2="10.506" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#1e8e3e"/><stop offset="1" stopColor="#34a853"/>
-                  </linearGradient>
-                </defs>
-                <circle cx="24" cy="23.9947" r="12" fill="#fff"/>
-                <path d="M24,12H44.7812a23.9939,23.9939,0,0,0-41.5639.0029L13.6079,30l.0093-.0024A11.9852,11.9852,0,0,1,24,12Z" fill="url(#chrome-red)"/>
-                <circle cx="24" cy="24" r="9.5" fill="#1a73e8"/>
-                <path d="M34.3913,30.0029,24.0007,48A23.994,23.994,0,0,0,44.78,12.0031H23.9989l-.0025.0093A11.985,11.985,0,0,1,34.3913,30.0029Z" fill="url(#chrome-yellow)"/>
-                <path d="M13.6086,30.0031,3.218,12.006A23.994,23.994,0,0,0,24.0025,48L34.3931,30.0029l-.0067-.0068a11.9852,11.9852,0,0,1-20.7778.007Z" fill="url(#chrome-green)"/>
-              </svg>
-              Add to Chrome · Free
+              Get started free
             </StardustButton>
             <StardustButton href="#demo" size="md" variant="outline">
               See a live Tanglish transcript ↓

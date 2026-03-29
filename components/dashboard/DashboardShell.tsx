@@ -133,7 +133,7 @@ function SidebarContent({ pathname, user, onClose }: { pathname: string; user: U
           style={{ color: '#07071a' }}
         >
           <PlusIcon />
-          New Meeting
+          Start Notetaker
         </Link>
       </div>
 
@@ -265,7 +265,7 @@ export function DashboardShell({ children, user }: Props) {
           className="px-3 py-1.5 rounded-lg text-xs font-semibold"
           style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.22)' }}
         >
-          + New
+          Record
         </Link>
       </header>
 
