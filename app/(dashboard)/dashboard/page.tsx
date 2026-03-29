@@ -28,6 +28,12 @@ export default async function DashboardPage() {
   const userId = session!.user.id;
   const firstName = session!.user.name?.split(' ')[0] ?? 'there';
 
+  const extensionToken = await query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM extension_tokens WHERE user_id = $1 AND expires_at > NOW()`,
+    [userId]
+  );
+  const extensionConnected = Number(extensionToken[0]?.count ?? 0) > 0;
+
   const recentMeetings = await query<Meeting>(
     `SELECT id, title, platform, status, created_at, duration, source_language
      FROM meetings
@@ -116,6 +122,28 @@ export default async function DashboardPage() {
             Start Notetaker
           </Link>
         </div>
+
+        {/* Extension not connected banner */}
+        {!extensionConnected && (
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl mb-6 animate-fade-up-2"
+            style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+          >
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              Chrome Extension not connected — Basha can&apos;t record meetings yet.
+            </p>
+            <a
+              href="/settings#integrations"
+              className="text-xs font-semibold whitespace-nowrap flex items-center gap-1 hover:opacity-80 transition-opacity"
+              style={{ color: '#f59e0b' }}
+            >
+              Set it up
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </a>
+          </div>
+        )}
 
         {/* Bento stat cards */}
         <div className="grid grid-cols-3 gap-px mb-10 animate-fade-up-2 overflow-hidden rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>

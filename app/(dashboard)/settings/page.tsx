@@ -24,24 +24,17 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            Language preferences, meeting platform, and integrations.
+            Language preferences and integrations.
           </p>
         </div>
 
         <div className="animate-fade-up-2 space-y-6">
-          <SettingsForm />
-        </div>
-
-        {/* Integrations */}
-        <div id="integrations" className="mt-10 animate-fade-up-3">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.22)' }}>
-              Integrations
-            </p>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          {/* Extension first — it's the core integration */}
+          <div id="integrations">
+            <ExtensionIntegration />
           </div>
-          <ExtensionIntegration />
+
+          <SettingsForm />
         </div>
       </div>
     </div>

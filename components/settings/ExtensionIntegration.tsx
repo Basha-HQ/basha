@@ -4,9 +4,6 @@ import { useState, useEffect } from 'react';
 
 interface TokenMeta {
   exists: boolean;
-  createdAt?: string;
-  expiresAt?: string;
-  lastUsedAt?: string | null;
 }
 
 export function ExtensionIntegration() {
@@ -73,11 +70,6 @@ export function ExtensionIntegration() {
     }
   }
 
-  function formatDate(iso?: string | null) {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
   return (
     <div
       className="rounded-2xl p-6 space-y-5"
@@ -117,24 +109,6 @@ export function ExtensionIntegration() {
         </div>
       ) : meta?.exists ? (
         <div className="space-y-4">
-          {/* Token metadata */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'Connected', value: formatDate(meta.createdAt) },
-              { label: 'Expires', value: formatDate(meta.expiresAt) },
-              { label: 'Last used', value: formatDate(meta.lastUsedAt) },
-            ].map(({ label, value }) => (
-              <div
-                key={label}
-                className="rounded-lg p-3 text-center"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-              >
-                <p className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{label}</p>
-                <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{value}</p>
-              </div>
-            ))}
-          </div>
-
           {connected && (
             <div
               className="px-4 py-3 rounded-lg text-xs"
@@ -200,7 +174,7 @@ export function ExtensionIntegration() {
           <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
             Make sure the Basha extension is installed before connecting.{' '}
             <a
-              href="https://chrome.google.com/webstore"
+              href="https://chromewebstore.google.com/detail/basha/kljamnehjflkogflokigndnaoeagelke"
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
