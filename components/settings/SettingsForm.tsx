@@ -105,7 +105,6 @@ export function SettingsForm() {
       .then((r) => r.json())
       .then((data) => {
         setPlatform(data.meeting_platform ?? 'both');
-        setOutputLanguage(data.output_language ?? 'en');
         setSpeakingLanguage(data.speaking_language ?? 'auto');
         setAutoJoin(data.auto_join_all ?? false);
       })
