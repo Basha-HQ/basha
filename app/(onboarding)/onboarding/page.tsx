@@ -13,7 +13,7 @@ const STEP_LABELS = ['Languages', 'Done'];
 export default function OnboardingPage() {
   const { update } = useSession();
   const [step, setStep] = useState(1);
-  const [languages, setLanguages] = useState<string[]>([]);
+  const [languages, setLanguages] = useState<string[]>(['en']);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
 

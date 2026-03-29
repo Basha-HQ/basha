@@ -115,13 +115,12 @@ export function DoneStep({ onBack, saving, error, onRetry }: Props) {
             className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-sm mb-3 btn-amber-shimmer"
             style={{ color: '#07071a' }}
           >
-            <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="4.5" fill="#07071a" />
-              <path d="M12 7.5h9.27A9 9 0 1 0 3.9 18.75L8.55 10.5A4.5 4.5 0 0 1 12 7.5Z" fill="#EA4335" />
-              <path d="M16.5 12a4.5 4.5 0 0 1-7.95 2.91L3.9 18.75A9 9 0 0 0 21.27 7.5H12a4.5 4.5 0 0 1 4.5 4.5Z" fill="#34A853" />
-              <path d="M8.55 10.5 3.9 18.75A9 9 0 0 1 12 3a8.95 8.95 0 0 1 9.27 4.5H12a4.5 4.5 0 0 0-3.45 3Z" fill="#FBBC05" />
-              <circle cx="12" cy="12" r="3" fill="#07071a" />
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg"
+              alt="Chrome"
+              className="w-5 h-5 flex-shrink-0"
+            />
             Set up Chrome Extension →
           </button>
           <button
