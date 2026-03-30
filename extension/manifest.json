@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "Basha",
+  "short_name": "Basha",
+  "description": "Record your Google Meet, Zoom, or Teams meeting silently. No bots. No invites. Transcribed in Hinglish, Tanglish & more.",
+  "version": "1.0.0",
+
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+
+  "host_permissions": [
+    "https://trybasha.in/*",
+    "http://localhost:3000/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Basha — Record meeting",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://meet.google.com/*",
+        "https://*.zoom.us/j/*",
+        "https://teams.microsoft.com/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://trybasha.in/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["content-script-app.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": []
+}

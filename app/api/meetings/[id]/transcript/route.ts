@@ -40,7 +40,7 @@ export async function GET(
   if (searchQuery) {
     // Full-text search
     transcripts = await query<TranscriptRow>(
-      `SELECT id, segment_index, timestamp_seconds, original_text, english_text
+      `SELECT id, segment_index, timestamp_seconds, original_text, english_text, speaker
        FROM transcripts
        WHERE meeting_id = $1
          AND (
@@ -52,7 +52,7 @@ export async function GET(
     );
   } else {
     transcripts = await query<TranscriptRow>(
-      `SELECT id, segment_index, timestamp_seconds, original_text, english_text
+      `SELECT id, segment_index, timestamp_seconds, original_text, english_text, speaker
        FROM transcripts
        WHERE meeting_id = $1
        ORDER BY segment_index`,

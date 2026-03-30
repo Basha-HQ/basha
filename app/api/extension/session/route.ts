@@ -25,10 +25,12 @@ export async function POST(req: NextRequest) {
     sourceLanguage: bodySourceLanguage = 'auto',
     meetingUrl = '',
     title,
+    participantNames = [],
   } = body as {
     sourceLanguage?: string;
     meetingUrl?: string;
     title?: string;
+    participantNames?: string[];
   };
 
   // If extension didn't send a language, fall back to the user's settings preference
@@ -53,12 +55,26 @@ export async function POST(req: NextRequest) {
       minute: '2-digit',
     })}`;
 
+  // Build initial speaker_labels from DOM-scraped names.
+  // SPEAKER_00 → first name, SPEAKER_01 → second name, etc.
+  // Sarvam diarization assigns IDs in order of first utterance, which roughly
+  // matches join order — this gives users a good starting point to correct if needed.
+  const initialSpeakerLabels =
+    participantNames.length > 0
+      ? Object.fromEntries(
+          participantNames
+            .slice(0, 10) // cap at 10 speakers
+            .map((name, i) => [`SPEAKER_${String(i).padStart(2, '0')}`, name])
+        )
+      : null;
+
   const rows = await query<{ id: string }>(
     `INSERT INTO meetings
-       (user_id, meeting_link, platform, title, status, source_language, recorder_type)
-     VALUES ($1, $2, $3, $4, 'recording', $5, 'extension')
+       (user_id, meeting_link, platform, title, status, source_language, recorder_type, speaker_labels)
+     VALUES ($1, $2, $3, $4, 'recording', $5, 'extension', $6)
      RETURNING id`,
-    [userId, meetingUrl || null, platform, meetingTitle, sourceLanguage]
+    [userId, meetingUrl || null, platform, meetingTitle, sourceLanguage,
+     initialSpeakerLabels ? JSON.stringify(initialSpeakerLabels) : null]
   );
 
   const meetingId = rows[0].id;

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Basha — Microphone Access</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0a0a1f;
+      color: #e2e8f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 400px;
+      text-align: center;
+    }
+    h2 { margin: 0 0 8px; font-size: 20px; }
+    p { color: rgba(255,255,255,0.5); font-size: 14px; margin: 0 0 24px; }
+    .status { font-size: 48px; margin-bottom: 16px; }
+    #btn-allow {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      padding: 12px 32px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #btn-allow:hover { opacity: 0.9; }
+    #msg-granted {
+      display: none;
+      color: #34d399;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    #msg-denied {
+      display: none;
+      color: #f87171;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="status" id="icon">&#127897;</div>
+    <h2>Microphone Access</h2>
+    <p>Basha needs your microphone to record your voice during meetings. This is a one-time setup.</p>
+    <button id="btn-allow">Allow Microphone</button>
+    <div id="msg-granted">Microphone access granted! You can close this tab.</div>
+    <div id="msg-denied">Microphone was denied. Click the lock icon in your address bar to allow it, then try again.</div>
+  </div>
+  <script src="mic-permission.js"></script>
+</body>
+</html>

@@ -21,6 +21,7 @@ export interface TranscriptRow {
   timestamp_seconds: number;
   original_text: string;
   english_text: string | null;
+  speaker: string | null;
 }
 
 /**
@@ -43,7 +44,10 @@ export function transcriptToTxt(
 
   for (const row of rows) {
     const ts = formatTimestamp(row.timestamp_seconds ?? 0);
-    lines.push(`[${ts}]`);
+    const speakerLabel = row.speaker
+      ? row.speaker.replace(/SPEAKER_0*(\d+)/, (_, n) => `Speaker ${parseInt(n, 10) + 1}`)
+      : null;
+    lines.push(speakerLabel ? `[${ts}] ${speakerLabel}` : `[${ts}]`);
     lines.push(`Original: ${row.original_text}`);
     if (row.english_text) {
       lines.push(`English:  ${row.english_text}`);

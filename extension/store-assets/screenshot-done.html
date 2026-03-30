@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basha — Screenshot 2</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 1280px;
+      height: 800px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+
+    /* ── Browser chrome ── */
+    .browser-chrome {
+      width: 100%;
+      height: 48px;
+      background: #1e2435;
+      border-bottom: 1px solid #2d3748;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+    }
+    .traffic-lights { display: flex; gap: 6px; }
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tl.red    { background: #ff5f57; }
+    .tl.yellow { background: #febc2e; }
+    .tl.green  { background: #28c840; }
+    .url-bar {
+      flex: 1; max-width: 480px; margin: 0 auto;
+      background: #0f172a; border-radius: 6px;
+      padding: 5px 14px; font-size: 13px; color: #94a3b8;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .url-bar .lock { color: #4ade80; font-size: 11px; }
+    .ext-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; margin-left: auto;
+    }
+
+    /* ── Dashboard layout ── */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      height: 752px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: #0d1424;
+      border-right: 1px solid #1e293b;
+      padding: 24px 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 20px 24px;
+      border-bottom: 1px solid #1e293b;
+      margin-bottom: 16px;
+    }
+    .sidebar-logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .sidebar-logo-text { font-weight: 800; font-size: 17px; }
+    .nav-item {
+      padding: 10px 20px;
+      font-size: 13px; font-weight: 500; color: #64748b;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer;
+    }
+    .nav-item.active { color: #e2e8f0; background: #1e293b; border-right: 2px solid #6366f1; }
+    .nav-item .icon { font-size: 16px; }
+
+    /* Main content */
+    .main {
+      overflow: hidden;
+      position: relative;
+      background: #0f172a;
+    }
+
+    .main-header {
+      padding: 24px 32px 16px;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .main-header h2 { font-size: 20px; font-weight: 700; }
+    .meeting-meta { font-size: 12px; color: #64748b; margin-top: 4px; }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 0;
+      height: calc(752px - 77px);
+      overflow: hidden;
+    }
+
+    /* Transcript panel */
+    .transcript-panel {
+      padding: 20px 24px;
+      overflow: hidden;
+      border-right: 1px solid #1e293b;
+    }
+    .panel-title {
+      font-size: 12px; font-weight: 600; color: #64748b;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+    .transcript-line {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #1e293b10;
+    }
+    .ts { font-size: 11px; color: #475569; font-variant-numeric: tabular-nums; padding-top: 2px; }
+    .line-content {}
+    .original { font-size: 13px; color: #e2e8f0; line-height: 1.5; margin-bottom: 3px; }
+    .translation { font-size: 12px; color: #64748b; line-height: 1.4; }
+    .speaker-tag {
+      display: inline-block;
+      font-size: 10px; font-weight: 600;
+      color: #a5b4fc;
+      background: rgba(99,102,241,0.12);
+      border-radius: 4px; padding: 1px 6px;
+      margin-bottom: 4px;
+    }
+    .speaker-tag.green { color: #4ade80; background: rgba(74,222,128,0.1); }
+    .speaker-tag.purple { color: #c4b5fd; background: rgba(196,181,253,0.1); }
+    .speaker-tag.amber { color: #fbbf24; background: rgba(251,191,36,0.1); }
+
+    /* Summary panel */
+    .summary-panel {
+      padding: 20px 20px;
+      overflow: hidden;
+      background: #0d1424;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .summary-card {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .summary-card-title {
+      font-size: 11px; font-weight: 600; color: #64748b;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 10px;
+    }
+    .summary-text { font-size: 13px; color: #cbd5e1; line-height: 1.6; }
+
+    .action-items { display: flex; flex-direction: column; gap: 7px; }
+    .action-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 13px; color: #cbd5e1;
+    }
+    .action-item::before {
+      content: '□';
+      color: #6366f1; flex-shrink: 0; margin-top: 1px;
+    }
+
+    .lang-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 11px; color: #a5b4fc;
+    }
+
+    /* ── Extension Popup ── */
+    .popup {
+      position: absolute;
+      top: 8px; right: 16px;
+      width: 300px;
+      background: #0f172a;
+      border-radius: 14px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(99,102,241,0.35);
+      overflow: hidden;
+      z-index: 20;
+    }
+    .popup-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .popup-logo {
+      width: 26px; height: 26px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+    .popup-title { font-weight: 700; font-size: 14px; color: #e2e8f0; }
+    .popup-sub { font-size: 10px; color: #64748b; }
+    .popup-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+
+    .done-icon { font-size: 28px; }
+    .done-title { font-weight: 700; font-size: 14px; color: #e2e8f0; }
+    .done-sub { font-size: 11px; color: #64748b; text-align: center; }
+    .btn-view {
+      display: block; width: 100%; padding: 9px 14px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white; border-radius: 8px;
+      font-size: 13px; font-weight: 600; text-align: center;
+    }
+    .btn-again {
+      display: block; width: 100%; padding: 8px 14px;
+      background: transparent; color: #94a3b8;
+      border: 1px solid #334155; border-radius: 8px;
+      font-size: 12px; font-weight: 500; text-align: center;
+    }
+
+    .hint {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: #1e293b;
+      padding: 8px 16px;
+      font-size: 12px; color: #64748b; text-align: center;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Browser chrome -->
+<div class="browser-chrome">
+  <div class="traffic-lights">
+    <div class="tl red"></div>
+    <div class="tl yellow"></div>
+    <div class="tl green"></div>
+  </div>
+  <div class="url-bar">
+    <span class="lock">🔒</span>
+    <span>trybasha.in/meetings/q3-product-review</span>
+  </div>
+  <div class="ext-icon">🎙</div>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">🎙</div>
+      <div class="sidebar-logo-text">Basha</div>
+    </div>
+    <div class="nav-item active"><span class="icon">📋</span> Meetings</div>
+    <div class="nav-item"><span class="icon">🔍</span> Search</div>
+    <div class="nav-item"><span class="icon">⚙️</span> Settings</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <div class="main-header">
+      <div>
+        <h2>Q3 Product Review — Basha Team</h2>
+        <div class="meeting-meta">Today · 47 min · Google Meet &nbsp;·&nbsp; <span class="lang-badge">Hinglish detected</span></div>
+      </div>
+    </div>
+
+    <div class="content-grid">
+
+      <!-- Transcript -->
+      <div class="transcript-panel">
+        <div class="panel-title">Dual Transcript — Original + English</div>
+
+        <div class="transcript-line">
+          <div class="ts">0:12</div>
+          <div class="line-content">
+            <div class="speaker-tag">Rahul K.</div>
+            <div class="original">Toh basically humara Q3 target achieve hua hai, around 85% of the goal.</div>
+            <div class="translation">So basically our Q3 target has been achieved, around 85% of the goal.</div>
+          </div>
+        </div>
+
+        <div class="transcript-line">
+          <div class="ts">0:38</div>
+          <div class="line-content">
+            <div class="speaker-tag green">Priya S.</div>
+            <div class="original">Haan, aur retention bhi improve hua — users jo first week mein drop karte they, wo ab zyada stick kar rahe hain.</div>
+            <div class="translation">Yes, and retention also improved — users who were dropping in the first week are now sticking longer.</div>
+          </div>
+        </div>
+
+        <div class="transcript-line">
+          <div class="ts">1:05</div>
+          <div class="line-content">
+            <div class="speaker-tag purple">Arjun V.</div>
+            <div class="original">Extension ke saath kya scene hai? Tamil users ka feedback positive tha na?</div>
+            <div class="translation">What's the status with the extension? Tamil users had positive feedback, right?</div>
+          </div>
+        </div>
+
+        <div class="transcript-line">
+          <div class="ts">1:22</div>
+          <div class="line-content">
+            <div class="speaker-tag amber">Divya M.</div>
+            <div class="original">Yes, Tanglish support is working well. Accuracy is around 91% now after the last model update.</div>
+            <div class="translation">Yes, Tanglish support is working well. Accuracy is around 91% now after the last model update.</div>
+          </div>
+        </div>
+
+        <div class="transcript-line">
+          <div class="ts">1:48</div>
+          <div class="line-content">
+            <div class="speaker-tag">Rahul K.</div>
+            <div class="original">Great. Toh next sprint mein hum Telugu support pe focus karenge, aur Chrome Web Store submission bhi schedule karte hain.</div>
+            <div class="translation">Great. So next sprint we'll focus on Telugu support, and let's also schedule the Chrome Web Store submission.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary + Popup -->
+      <div class="summary-panel" style="position:relative;">
+
+        <div class="panel-title">AI Summary</div>
+
+        <div class="summary-card">
+          <div class="summary-card-title">Overview</div>
+          <div class="summary-text">Q3 targets achieved at 85%. User retention improved notably in Week 1. Chrome extension Hinglish and Tanglish support performing well at 91% accuracy.</div>
+        </div>
+
+        <div class="summary-card">
+          <div class="summary-card-title">Action Items</div>
+          <div class="action-items">
+            <div class="action-item">Schedule Chrome Web Store submission</div>
+            <div class="action-item">Begin Telugu language support sprint</div>
+            <div class="action-item">Share Q3 retention data with investors</div>
+            <div class="action-item">Follow up with Tamil beta users for case study</div>
+          </div>
+        </div>
+
+        <!-- Popup overlay -->
+        <div class="popup">
+          <div class="popup-header">
+            <div class="popup-logo">🎙</div>
+            <div>
+              <div class="popup-title">Basha</div>
+              <div class="popup-sub">Bot-free meeting recorder</div>
+            </div>
+          </div>
+          <div class="popup-body">
+            <div class="done-icon">✅</div>
+            <div class="done-title">Transcript ready!</div>
+            <div class="done-sub">Your dual transcript (original + English) is ready.</div>
+            <div class="btn-view" style="width:100%">View meeting notes →</div>
+            <div class="btn-again" style="width:100%">Record another meeting</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hint">📸 To save: Use Windows Snipping Tool (Win+Shift+S) and crop to exactly 1280×800. Or DevTools → right-click &lt;body&gt; → Capture screenshot.</div>
+
+</body>
+</html>

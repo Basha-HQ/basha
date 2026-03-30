@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basha — Store Icon Generator</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1e1e2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      gap: 24px;
+      color: #e2e8f0;
+    }
+    canvas { border-radius: 22px; display: block; }
+    button {
+      padding: 10px 28px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    p { font-size: 13px; color: #64748b; }
+  </style>
+</head>
+<body>
+<p>128 × 128 Store Icon — Preview</p>
+<canvas id="c" width="128" height="128"></canvas>
+<button onclick="download()">Download icon-128.png</button>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// Background gradient
+const grad = ctx.createLinearGradient(0, 0, 128, 128);
+grad.addColorStop(0, '#6366f1');
+grad.addColorStop(1, '#8b5cf6');
+ctx.fillStyle = grad;
+ctx.roundRect(0, 0, 128, 128, 22);
+ctx.fill();
+
+// Microphone body
+ctx.fillStyle = 'white';
+// mic body rounded rect
+const micX = 46, micY = 20, micW = 36, micH = 52, micR = 18;
+ctx.beginPath();
+ctx.roundRect(micX, micY, micW, micH, micR);
+ctx.fill();
+
+// Mic stand arc
+ctx.strokeStyle = 'white';
+ctx.lineWidth = 5;
+ctx.lineCap = 'round';
+ctx.beginPath();
+ctx.arc(64, 72, 26, Math.PI, 0, false);
+ctx.stroke();
+
+// Mic stand vertical line
+ctx.beginPath();
+ctx.moveTo(64, 98);
+ctx.lineTo(64, 108);
+ctx.stroke();
+
+// Mic stand base
+ctx.beginPath();
+ctx.moveTo(49, 108);
+ctx.lineTo(79, 108);
+ctx.stroke();
+
+function download() {
+  canvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'icon-128.png';
+    a.click();
+  }, 'image/png');
+}
+</script>
+</body>
+</html>
