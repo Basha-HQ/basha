@@ -1,4 +1,3 @@
-import { SettingsForm } from '@/components/settings/SettingsForm';
 import { ExtensionIntegration } from '@/components/settings/ExtensionIntegration';
 
 export const metadata = { title: 'Settings — Basha' };
@@ -24,17 +23,12 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            Language preferences and integrations.
+            Manage your integrations.
           </p>
         </div>
 
-        <div className="animate-fade-up-2 space-y-6">
-          {/* Extension first — it's the core integration */}
-          <div id="integrations">
-            <ExtensionIntegration />
-          </div>
-
-          <SettingsForm />
+        <div id="integrations" className="animate-fade-up-2">
+          <ExtensionIntegration />
         </div>
       </div>
     </div>
