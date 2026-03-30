@@ -4,14 +4,6 @@ import { useState, useEffect } from 'react';
 import ExtensionInstallBanner from './ExtensionInstallBanner';
 import ExtensionStatusCard from './ExtensionStatusCard';
 
-const LANGUAGE_OPTIONS = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'hi-IN', label: 'Hindi' },
-  { value: 'ta-IN', label: 'Tamil' },
-  { value: 'te-IN', label: 'Telugu' },
-  { value: 'kn-IN', label: 'Kannada' },
-  { value: 'en-IN', label: 'English' },
-];
 
 type Mode = 'form' | 'extension-status';
 
@@ -37,7 +29,6 @@ function useExtensionDetected() {
 
 export function NewMeetingForm() {
   const [mode, setMode] = useState<Mode>('form');
-  const [sourceLanguage, setSourceLanguage] = useState('auto');
   const [extensionMeetingId, setExtensionMeetingId] = useState('');
   const extensionDetected = useExtensionDetected();
 
@@ -74,36 +65,6 @@ export function NewMeetingForm() {
               {/* Extension detected — show ready state */}
               {extensionDetected === true && (
                 <>
-                  {/* Language picker */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                      Recording language
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {LANGUAGE_OPTIONS.map((opt) => {
-                        const active = sourceLanguage === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => setSourceLanguage(opt.value)}
-                            className="px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all"
-                            style={{
-                              background: active ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.05)',
-                              color: active ? '#a5b4fc' : 'rgba(255,255,255,0.45)',
-                              border: active ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                            }}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                      Helps transcribe code-mixed speech (Hinglish, Tanglish, etc.) accurately
-                    </p>
-                  </div>
-
                   {/* Instruction card */}
                   <div className="px-4 py-3.5 rounded-xl text-sm leading-relaxed space-y-1" style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', color: 'rgba(255,255,255,0.55)' }}>
                     <p className="font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>

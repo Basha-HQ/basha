@@ -23,6 +23,16 @@ function getGreeting() {
   return 'Good evening';
 }
 
+function formatRecordedTime(totalSeconds: number): { value: string; unit: string } {
+  if (totalSeconds === 0) return { value: '0', unit: 'min' };
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes < 60) return { value: String(totalMinutes), unit: 'min' };
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (mins === 0) return { value: String(hours), unit: 'hr' };
+  return { value: `${hours}h ${mins}m`, unit: '' };
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
@@ -43,41 +53,130 @@ export default async function DashboardPage() {
     [userId]
   );
 
-  const [stats] = await query<{ total: string; completed: string; processing: string }>(
+  const [stats] = await query<{ total: string; completed: string; total_seconds: string }>(
     `SELECT
        COUNT(*) AS total,
        COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-       COUNT(*) FILTER (WHERE status = 'processing') AS processing
+       COALESCE(SUM(duration), 0) AS total_seconds
      FROM meetings WHERE user_id = $1`,
     [userId]
   );
 
+  const totalSeconds = Number(stats?.total_seconds ?? 0);
+  const recordedTime = formatRecordedTime(totalSeconds);
+
   const statCards = [
     {
-      label: 'Total',
-      sublabel: 'Meetings',
+      key: 'total',
       value: stats?.total ?? '0',
+      unit: null,
+      label: 'Meetings',
+      sublabel: 'Recorded',
       accent: '#f59e0b',
-      accentBg: 'rgba(245,158,11,0.06)',
       topBorder: '#f59e0b',
     },
     {
-      label: 'Completed',
-      sublabel: 'Transcribed',
-      value: stats?.completed ?? '0',
-      accent: '#34d399',
-      accentBg: 'rgba(52,211,153,0.06)',
-      topBorder: '#34d399',
+      key: 'time',
+      value: recordedTime.value,
+      unit: recordedTime.unit || null,
+      label: 'Hours',
+      sublabel: 'Of conversation',
+      accent: '#a78bfa',
+      topBorder: '#a78bfa',
     },
     {
-      label: 'Processing',
-      sublabel: 'In progress',
-      value: stats?.processing ?? '0',
-      accent: '#818cf8',
-      accentBg: 'rgba(129,140,248,0.06)',
-      topBorder: '#818cf8',
+      key: 'completed',
+      value: stats?.completed ?? '0',
+      unit: null,
+      label: 'Transcribed',
+      sublabel: 'Successfully',
+      accent: '#34d399',
+      topBorder: '#34d399',
     },
   ];
+
+  const quickStartSteps = [
+    {
+      done: extensionConnected,
+      label: 'Install Chrome Extension',
+      sublabel: 'One-time setup for bot-free recording',
+      href: '/settings#integrations',
+      cta: 'Set up',
+    },
+    {
+      done: Number(stats?.total ?? 0) > 0,
+      label: 'Record your first meeting',
+      sublabel: 'Open a Meet tab and click the Basha icon',
+      href: '/new-meeting',
+      cta: 'Start',
+    },
+    {
+      done: Number(stats?.completed ?? 0) > 0,
+      label: 'Read your first transcript',
+      sublabel: 'Hinglish, Tanglish — all preserved',
+      href: '/meetings',
+      cta: 'View',
+    },
+  ];
+  const allDone = quickStartSteps.every((s) => s.done);
+
+  const quickStartPanel = !allDone ? (
+    <div
+      className="rounded-xl p-5 space-y-4"
+      style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.07)',
+      }}
+    >
+      <h3
+        className="text-xs font-semibold uppercase tracking-widest"
+        style={{ color: 'rgba(255,255,255,0.3)' }}
+      >
+        Getting started
+      </h3>
+      <ol className="space-y-3">
+        {quickStartSteps.map((step, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <div
+              className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-[10px] font-bold"
+              style={{
+                background: step.done ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
+                border: step.done ? '1px solid rgba(52,211,153,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                color: step.done ? '#34d399' : 'rgba(255,255,255,0.3)',
+              }}
+            >
+              {step.done ? '✓' : i + 1}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-sm font-medium leading-snug"
+                style={{
+                  color: step.done ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.78)',
+                  textDecoration: step.done ? 'line-through' : 'none',
+                }}
+              >
+                {step.label}
+              </p>
+              {!step.done && (
+                <>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                    {step.sublabel}
+                  </p>
+                  <a
+                    href={step.href}
+                    className="inline-block mt-1.5 text-xs font-semibold transition-opacity hover:opacity-70"
+                    style={{ color: '#f59e0b' }}
+                  >
+                    {step.cta} →
+                  </a>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -108,7 +207,9 @@ export default async function DashboardPage() {
             <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
               {Number(stats?.total ?? 0) === 0
                 ? 'Your first Tanglish transcript is one meeting away.'
-                : `${stats?.total} meeting${Number(stats?.total) !== 1 ? 's' : ''} transcribed so far`}
+                : totalSeconds > 0
+                  ? `${recordedTime.value}${recordedTime.unit ? ' ' + recordedTime.unit : ''} of meetings captured so far`
+                  : `${stats?.total} meeting${Number(stats?.total) !== 1 ? 's' : ''} transcribed so far`}
             </p>
           </div>
           <Link
@@ -149,18 +250,25 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-3 gap-px mb-10 animate-fade-up-2 overflow-hidden rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
           {statCards.map((s) => (
             <div
-              key={s.label}
+              key={s.key}
               className="flex flex-col justify-between p-5 sm:p-6"
-              style={{
-                background: '#07071a',
-                borderTop: `2px solid ${s.topBorder}`,
-              }}
+              style={{ background: '#07071a', borderTop: `2px solid ${s.topBorder}` }}
             >
-              <div
-                className="text-4xl sm:text-5xl font-bold leading-none mb-3"
-                style={{ color: s.accent }}
-              >
-                {s.value}
+              <div className="flex items-baseline gap-1.5 mb-3">
+                <span
+                  className="text-4xl sm:text-5xl font-bold leading-none"
+                  style={{ color: s.accent }}
+                >
+                  {s.value}
+                </span>
+                {s.unit && (
+                  <span
+                    className="text-lg font-semibold leading-none"
+                    style={{ color: s.accent, opacity: 0.6 }}
+                  >
+                    {s.unit}
+                  </span>
+                )}
               </div>
               <div>
                 <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.75)' }}>{s.label}</p>
@@ -225,12 +333,12 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {/* Upcoming */}
+          {/* Upcoming / Getting started */}
           <div className="animate-fade-up-4">
             <h2 className="text-sm font-semibold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>
               Upcoming
             </h2>
-            <UpcomingMeetingsWidget />
+            <UpcomingMeetingsWidget fallback={quickStartPanel} />
           </div>
         </div>
       </div>

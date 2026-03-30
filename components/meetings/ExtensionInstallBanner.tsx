@@ -76,7 +76,7 @@ export default function ExtensionInstallBanner() {
       </ul>
 
       <a
-        href="https://chrome.google.com/webstore"
+        href="https://chromewebstore.google.com/detail/basha/kljamnehjflkogflokigndnaoeagelke"
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors cursor-pointer"
