@@ -8,7 +8,7 @@
  * audio_path is set to the internal /api/meetings/:id/audio serve endpoint.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { getExtensionUser } from '@/lib/extension/auth';
 import { queryOne, query } from '@/lib/db';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
@@ -69,16 +69,20 @@ export async function POST(req: NextRequest) {
       [audioBuffer, `/api/meetings/${meetingId}/audio`, duration, meetingId]
     );
 
-    // Trigger pipeline asynchronously — respond 202 immediately
-    processAudioForMeeting({
-      meetingId,
-      audioBuffer,
-      fileName,
-      sourceLanguage: meeting.source_language ?? 'auto',
-      outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
-    }).catch((err) => {
-      console.error(`[extension/upload] Pipeline error for meeting ${meetingId}:`, err);
-    });
+    // Trigger pipeline — after() keeps the Vercel function alive until the promise
+    // settles even after the 202 response has been sent. Without this, Vercel
+    // terminates the function context mid-pipeline, killing the pg Pool connection.
+    after(
+      processAudioForMeeting({
+        meetingId,
+        audioBuffer,
+        fileName,
+        sourceLanguage: meeting.source_language ?? 'auto',
+        outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
+      }).catch((err) => {
+        console.error(`[extension/upload] Pipeline error for meeting ${meetingId}:`, err);
+      })
+    );
 
     return NextResponse.json(
       {

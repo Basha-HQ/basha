@@ -3,7 +3,7 @@
  * DELETE /api/bots/:id  — remove bot from meeting
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { queryOne, query } from '@/lib/db';
 import {
@@ -49,16 +49,18 @@ export async function GET(
       const mappedStatus = mapRecallStatus(recallStatus);
 
       if (mappedStatus === 'done') {
-        // Recording is ready — download audio and start processing
-        await handleRecordingReady(bot, recallBot, session.user.id);
-        // Re-fetch updated bot from DB
-        const updated = await queryOne<BotRow>(
-          'SELECT * FROM bots WHERE id = $1',
-          [id]
+        // Mark as processing immediately so the next poll doesn't double-trigger
+        await query(
+          `UPDATE bots SET status = 'processing', updated_at = NOW() WHERE id = $1`,
+          [bot.id]
         );
-        if (updated) {
-          return NextResponse.json({ bot: updated });
-        }
+        bot.status = 'processing';
+        // Run pipeline after the response — keeps Vercel function alive past the 202
+        after(
+          handleRecordingReady(bot, recallBot, session.user.id).catch((err) => {
+            console.error('[api/bots] Pipeline error:', err);
+          })
+        );
       } else if (mappedStatus === 'failed') {
         const errorMsg = recallBot.status_changes?.at(-1)?.message ?? 'Bot failed';
         await query(

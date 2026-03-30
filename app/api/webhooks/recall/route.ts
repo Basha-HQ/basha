@@ -18,7 +18,7 @@
  * }
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { queryOne, query } from '@/lib/db';
 import { getBot as getRecallBot } from '@/lib/recall/client';
 import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
@@ -90,10 +90,19 @@ export async function POST(req: NextRequest) {
     try {
       // Fetch full bot data from Recall.ai (need recordings array for download URL)
       const recallBot = await getRecallBot(recallBotId);
-      await handleRecordingReady(bot, recallBot, bot.user_id);
+      // Mark as processing before responding so Recall.ai doesn't re-send the webhook
+      await query(
+        `UPDATE bots SET status = 'processing', updated_at = NOW() WHERE id = $1`,
+        [bot.id]
+      );
+      // Run pipeline after the 200 response — keeps Vercel function alive past the response
+      after(
+        handleRecordingReady(bot, recallBot, bot.user_id).catch((err) => {
+          console.error('[webhook/recall] Pipeline error:', err);
+        })
+      );
     } catch (err) {
-      console.error('[webhook/recall] Pipeline error:', err);
-      // handleRecordingReady already writes the failure to DB — just return 500 so Recall.ai retries
+      console.error('[webhook/recall] Setup error:', err);
       return NextResponse.json({ error: 'Pipeline error' }, { status: 500 });
     }
   } else if (statusCode === 'fatal' || statusCode === 'analysis_failed') {
