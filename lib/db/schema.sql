@@ -209,6 +209,21 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_prt_token_hash ON password_reset_tokens(token_hash);
 
+-- ── Sprint 6b additions — Chunked audio upload (bypasses Vercel 4.5MB limit) ──
+
+-- Temporary storage for in-flight chunked uploads from the Chrome extension.
+-- Rows are deleted once all chunks are received and reassembled.
+CREATE TABLE IF NOT EXISTS upload_chunks (
+  id           SERIAL PRIMARY KEY,
+  meeting_id   UUID        NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  chunk_index  INTEGER     NOT NULL,
+  total_chunks INTEGER     NOT NULL,
+  data         BYTEA       NOT NULL,
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(meeting_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_upload_chunks_meeting ON upload_chunks(meeting_id);
+
 -- ── Sprint 7 additions — Speaker labels + shareable transcript links ──────────
 
 -- speaker_labels: JSONB map of raw speaker ID → user-provided display name
