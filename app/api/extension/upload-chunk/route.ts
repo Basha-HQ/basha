@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       `SELECT data FROM upload_chunks WHERE meeting_id = $1 ORDER BY chunk_index ASC`,
       [meetingId]
     );
-    const audioBuffer = Buffer.concat(chunkRows.rows.map((r) => r.data));
+    const audioBuffer = Buffer.concat(chunkRows.map((r) => r.data));
 
     // Clean up chunk rows immediately
     await query(`DELETE FROM upload_chunks WHERE meeting_id = $1`, [meetingId]);
