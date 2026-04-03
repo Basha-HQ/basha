@@ -19,6 +19,9 @@ const APP_ORIGINS = [
   'https://trybasha.in',
 ];
 
+// Allow content scripts to read chrome.storage.session
+chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+
 // ---------------------------------------------------------------------------
 // Helpers — offscreen document lifecycle
 // ---------------------------------------------------------------------------

@@ -91,6 +91,7 @@ function removeIndicator() {
 // ---------------------------------------------------------------------------
 
 function showRecordingPrompt() {
+  console.log('[basha] showRecordingPrompt called, dismissed:', promptDismissed, 'exists:', !!document.getElementById(PROMPT_ID));
   if (promptDismissed) return;
   if (document.getElementById(PROMPT_ID)) return;
 
@@ -238,8 +239,8 @@ function setupMeetingDetection() {
     }
     if (!wasInCall && nowInCall) {
       wasInCall = true;
-      chrome.storage.session.get(['isRecording'], ({ isRecording }) => {
-        if (!isRecording) showRecordingPrompt();
+      chrome.storage.session.get(['isRecording'], (result) => {
+        if (!result?.isRecording) showRecordingPrompt();
       });
     }
   }
@@ -282,7 +283,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // Init
 // ---------------------------------------------------------------------------
 
-chrome.storage.session.get(['isRecording'], ({ isRecording }) => {
+console.log('[basha] content-script.js loaded on', location.href);
+console.log('[basha] isOnActiveMeetingPage:', isOnActiveMeetingPage());
+
+chrome.storage.session.get(['isRecording'], (result) => {
+  const isRecording = result?.isRecording ?? false;
+  console.log('[basha] init — isRecording:', isRecording, 'isActiveMeeting:', isOnActiveMeetingPage());
   if (isRecording) {
     createIndicator();
   } else {
