@@ -99,7 +99,7 @@ function showRecordingPrompt() {
   style.id = PROMPT_ID + '-style';
   style.textContent = `
     #${PROMPT_ID} {
-      position: fixed; bottom: 24px; left: 50%;
+      position: fixed; top: 24px; left: 50%;
       transform: translateX(-50%) translateY(0);
       z-index: 99999;
       display: flex; align-items: center; gap: 10px;
@@ -143,7 +143,7 @@ function showRecordingPrompt() {
     }
     #${PROMPT_ID} .b-btn-dismiss:hover { border-color: rgba(255,255,255,0.35); color: #e2e8f0; }
     @keyframes basha-prompt-in {
-      from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+      from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
       to   { opacity: 1; transform: translateX(-50%) translateY(0); }
     }
   `;
