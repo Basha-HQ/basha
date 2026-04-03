@@ -85,10 +85,11 @@ function createIndicator() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #${INDICATOR_ID} .dot {
-      width: 7px; height: 7px; background: #ef4444; border-radius: 50%;
-      animation: basha-pulse 1.2s infinite;
+      width: 14px; height: 14px; background: #ef4444; border-radius: 50%;
+      flex-shrink: 0;
+      animation: basha-blink 1s step-start infinite;
     }
-    @keyframes basha-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes basha-blink { 0%,100%{opacity:1} 50%{opacity:0} }
   `;
   document.head.appendChild(style);
 
