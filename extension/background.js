@@ -19,8 +19,13 @@ const APP_ORIGINS = [
   'https://trybasha.in',
 ];
 
-// Allow content scripts to read chrome.storage.session
-chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+// Allow content scripts to read chrome.storage.session.
+// Must be called after the SW is active, not at top-level evaluation time.
+function initSessionStorage() {
+  chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' }).catch(() => {});
+}
+chrome.runtime.onInstalled.addListener(initSessionStorage);
+chrome.runtime.onStartup.addListener(initSessionStorage);
 
 // ---------------------------------------------------------------------------
 // Helpers — offscreen document lifecycle
