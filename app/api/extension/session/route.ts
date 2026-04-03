@@ -26,12 +26,22 @@ export async function POST(req: NextRequest) {
     meetingUrl = '',
     title,
     participantNames = [],
+    startedAt,
   } = body as {
     sourceLanguage?: string;
     meetingUrl?: string;
     title?: string;
     participantNames?: string[];
+    startedAt?: string;
   };
+
+  // Validate client-provided timestamp — accept only reasonable values (within last hour)
+  const clientTime = startedAt ? new Date(startedAt) : null;
+  const validClientTime =
+    clientTime && !isNaN(clientTime.getTime()) &&
+    Math.abs(Date.now() - clientTime.getTime()) < 3_600_000
+      ? clientTime
+      : null;
 
   // If extension didn't send a language, fall back to the user's settings preference
   let sourceLanguage = bodySourceLanguage;
@@ -46,13 +56,13 @@ export async function POST(req: NextRequest) {
   }
 
   const platform = detectPlatform(meetingUrl);
+  const referenceTime = validClientTime ?? new Date();
   const meetingTitle =
     title ||
-    `Meeting · ${new Date().toLocaleDateString('en-IN', {
+    `Meeting · ${referenceTime.toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
+      timeZone: 'Asia/Kolkata',
     })}`;
 
   // Build initial speaker_labels from DOM-scraped names.
@@ -70,11 +80,12 @@ export async function POST(req: NextRequest) {
 
   const rows = await query<{ id: string }>(
     `INSERT INTO meetings
-       (user_id, meeting_link, platform, title, status, source_language, recorder_type, speaker_labels)
-     VALUES ($1, $2, $3, $4, 'recording', $5, 'extension', $6)
+       (user_id, meeting_link, platform, title, status, source_language, recorder_type, speaker_labels, created_at)
+     VALUES ($1, $2, $3, $4, 'recording', $5, 'extension', $6, $7)
      RETURNING id`,
     [userId, meetingUrl || null, platform, meetingTitle, sourceLanguage,
-     initialSpeakerLabels ? JSON.stringify(initialSpeakerLabels) : null]
+     initialSpeakerLabels ? JSON.stringify(initialSpeakerLabels) : null,
+     validClientTime ?? new Date()]
   );
 
   const meetingId = rows[0].id;

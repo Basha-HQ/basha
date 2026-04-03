@@ -91,18 +91,29 @@ Be concise. The overview must be 1–2 sentences. If a section has no content, u
 }
 
 /**
- * Generate a short, descriptive meeting title from the summary topics.
- * Returns an empty string on failure so callers can fall back gracefully.
+ * Generate a short, descriptive meeting title from the summary.
+ * Uses topics + overview for richer context. Returns an empty string on failure.
  */
 export async function generateMeetingTitle(summary: MeetingSummary): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return '';
 
   const topicsText = summary.topics.slice(0, 5).join(', ');
-  const prompt = `Based on these meeting topics: "${topicsText}"
+  const overviewText = summary.overview?.slice(0, 200) ?? '';
+
+  // Need at least some content to generate a meaningful title
+  if (!topicsText && !overviewText) return '';
+
+  const context = [
+    topicsText ? `Topics: ${topicsText}` : '',
+    overviewText ? `Overview: ${overviewText}` : '',
+  ].filter(Boolean).join('\n');
+
+  const prompt = `Based on this meeting summary:
+${context}
 
 Write a short, specific meeting title (4-8 words). No quotes, no punctuation at the end.
-Examples: "Q2 Product Roadmap Planning", "Marketing Campaign Budget Review", "Engineering Sprint Retrospective"
+Examples: Q2 Product Roadmap Planning, Marketing Campaign Budget Review, Engineering Sprint Retrospective
 
 Respond with only the title, nothing else.`;
 
@@ -122,11 +133,23 @@ Respond with only the title, nothing else.`;
       }),
     });
 
-    if (!response.ok) return '';
+    if (!response.ok) {
+      console.warn('[summarize] generateMeetingTitle failed:', response.status);
+      return '';
+    }
     const data = await response.json();
-    const title: string = data.choices?.[0]?.message?.content?.trim() ?? '';
-    return title.replace(/^["']|["']$/g, '').trim();
-  } catch {
+    const raw: string = data.choices?.[0]?.message?.content?.trim() ?? '';
+    const title = raw
+      .replace(/^["'`]|["'`]$/g, '') // strip surrounding quotes
+      .replace(/[.!?]+$/, '')         // strip trailing punctuation
+      .trim();
+
+    // Sanity check: reject if too long (model hallucinated) or empty
+    const wordCount = title.split(/\s+/).filter(Boolean).length;
+    if (!title || wordCount < 2 || wordCount > 12) return '';
+    return title;
+  } catch (err) {
+    console.warn('[summarize] generateMeetingTitle error:', err);
     return '';
   }
 }
