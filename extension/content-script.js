@@ -159,11 +159,7 @@ function showRecordingPrompt() {
   `;
   document.body.appendChild(el);
 
-  // Auto-dismiss after 10 seconds
-  const autoDismissTimer = setTimeout(() => dismissPrompt(), 10000);
-
   el.querySelector('.b-btn-record').addEventListener('click', () => {
-    clearTimeout(autoDismissTimer);
     // Show "Starting…" feedback
     el.querySelector('.b-text').textContent = 'Starting…';
     el.querySelector('.b-btn-record').style.display = 'none';
@@ -177,7 +173,6 @@ function showRecordingPrompt() {
   });
 
   el.querySelector('.b-btn-dismiss').addEventListener('click', () => {
-    clearTimeout(autoDismissTimer);
     dismissPrompt();
   });
 }
