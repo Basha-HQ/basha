@@ -20,7 +20,8 @@ let recordingRetryInterval = null;
 function startRecordingRetry(meetingUrl) {
   if (recordingRetryInterval) return;
   recordingRetryInterval = setInterval(() => {
-    chrome.runtime.sendMessage({ type: 'AUTO_START_RECORDING', meetingUrl });
+    console.log('[basha] retrying AUTO_START_RECORDING for', meetingUrl);
+    chrome.runtime.sendMessage({ type: 'AUTO_START_RECORDING', meetingUrl, isRetry: true });
   }, 3000);
 }
 
@@ -292,12 +293,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     startRecordingRetry(message.meetingUrl);
   }
   if (message.type === 'AUTO_START_FAILED') {
+    // Only a first-attempt hard fail (bad token etc) — stop and show error
     stopRecordingRetry();
     const el = document.getElementById(PROMPT_ID);
     if (el) {
       el.querySelector('.b-text').textContent = message.error || 'Could not start — check extension token';
       el.querySelector('.b-btn-record').style.display = 'none';
       el.querySelector('.b-btn-dismiss').textContent = 'Dismiss';
+    } else {
+      // Prompt already gone — show a brief console note
+      console.warn('[basha] AUTO_START_FAILED:', message.error);
     }
   }
 });

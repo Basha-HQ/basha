@@ -315,29 +315,37 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  // Content script: user clicked "Record" in the in-page prompt
+  // Content script: user clicked "Record" in the in-page prompt (initial or retry)
   if (message.type === 'AUTO_START_RECORDING') {
     const tabId = _sender.tab?.id;
     const meetingUrl = message.meetingUrl;
+    const isRetry = message.isRetry || false;
     (async () => {
       const { lastSourceLanguage } = await chrome.storage.local.get('lastSourceLanguage');
+      console.log('[background] AUTO_START_RECORDING attempt, isRetry:', isRetry, 'tabId:', tabId);
       const result = await startRecording({
         tabId,
         sourceLanguage: lastSourceLanguage || 'auto',
         meetingUrl,
       });
-      if (result.error && (
-        result.error.includes('not been invoked') ||
-        result.error.includes('cannot be captured') ||
-        result.error.includes('Could not capture')
-      )) {
-        // Waiting room — queue the recording intent, retry when user joins
+      console.log('[background] startRecording result:', result);
+      if (result.success) {
+        chrome.tabs.sendMessage(tabId, { type: 'RECORDING_STARTED_FROM_PROMPT' }).catch(() => {});
+      } else if (isRetry) {
+        // During retry loop — keep queued, never fail permanently
         chrome.tabs.sendMessage(tabId, { type: 'RECORDING_QUEUED', meetingUrl }).catch(() => {});
       } else {
-        chrome.tabs.sendMessage(tabId, {
-          type: result.error ? 'AUTO_START_FAILED' : 'RECORDING_STARTED_FROM_PROMPT',
-          error: result.error,
-        }).catch(() => {});
+        // First attempt — decide whether to queue or hard fail
+        const isCaptureFail = result.error && (
+          result.error.includes('not been invoked') ||
+          result.error.includes('cannot be captured') ||
+          result.error.includes('Could not capture')
+        );
+        if (isCaptureFail) {
+          chrome.tabs.sendMessage(tabId, { type: 'RECORDING_QUEUED', meetingUrl }).catch(() => {});
+        } else {
+          chrome.tabs.sendMessage(tabId, { type: 'AUTO_START_FAILED', error: result.error }).catch(() => {});
+        }
       }
       sendResponse(result);
     })();
