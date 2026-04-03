@@ -39,6 +39,12 @@ export default function PrivacyPage() {
             stored in your account for later review.
           </li>
           <li>
+            <strong>Participant display names:</strong> When recording a Google Meet session, the
+            extension reads the display names of participants visible in the meeting UI and includes
+            them with your meeting record to help identify speakers in the transcript. Only names
+            already visible to you on screen are collected.
+          </li>
+          <li>
             <strong>Extension auth token:</strong> A secure token stored locally in the extension
             to authenticate API calls. We store only a hashed version server-side.
           </li>
@@ -99,6 +105,12 @@ export default function PrivacyPage() {
           click <strong>Start Recording</strong> and stops when you click <strong>Stop</strong>.
           The extension does not run in the background or collect data outside of an active
           recording session.
+        </p>
+        <p className="mt-2">
+          During a Google Meet recording, the extension also reads the display names of participants
+          visible in the meeting UI. These names are sent to trybasha.in alongside the audio to help
+          label speakers in your transcript. Only names already visible to you on screen are
+          collected — the extension does not access any hidden or private meeting data.
         </p>
         <p className="mt-2">
           The extension communicates exclusively with <strong>trybasha.in</strong>. No audio or

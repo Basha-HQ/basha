@@ -92,8 +92,7 @@ export async function POST(req: NextRequest) {
       { status: 202 }
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[extension/upload] Unhandled error:', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error('[extension/upload] Unhandled error:', err);
+    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
   }
 }

@@ -33,7 +33,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 async function handleStartRecording({ streamId, meetingId, token, origin }) {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    console.warn('[offscreen] Already recording — ignoring duplicate start');
     return;
   }
 
@@ -54,9 +53,7 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
       },
       video: false,
     });
-    console.log('[offscreen] Tab audio captured, tracks:', tabStream.getAudioTracks().length);
   } catch (err) {
-    console.error('[offscreen] Tab audio capture failed:', err);
     chrome.runtime.sendMessage({
       type: 'RECORDING_ERROR',
       error: `Could not capture tab audio: ${err.message}`,
@@ -75,10 +72,8 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
       },
       video: false,
     });
-    console.log('[offscreen] Microphone captured, tracks:', micStream.getAudioTracks().length);
-  } catch (err) {
+  } catch {
     // Microphone access denied — record tab audio only
-    console.warn('[offscreen] Microphone access denied, recording tab audio only:', err.message);
   }
 
   // 3. Mix streams via Web Audio API (always use AudioContext for consistent output)
@@ -92,9 +87,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   if (micStream) {
     const micSource = audioContext.createMediaStreamSource(micStream);
     micSource.connect(destination);
-    console.log('[offscreen] Mixed tab + mic audio');
-  } else {
-    console.log('[offscreen] Using tab audio only (no mic) — routed through AudioContext');
   }
 
   const recordingStream = destination.stream;
@@ -109,7 +101,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   mediaRecorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
       chunks.push(event.data);
-      console.log('[offscreen] Chunk received, size:', event.data.size, 'total chunks:', chunks.length);
     }
   };
 
@@ -121,8 +112,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     const duration = Math.round((Date.now() - recordingStartTime) / 1000);
     const capturedMeetingId = activeMeetingId;
     const creds = uploadCredentials;
-
-    console.log('[offscreen] Recording stopped — blob size:', blob.size, 'bytes, duration:', duration, 's, chunks:', chunks.length);
 
     // Stop all tracks to release microphone/tab audio
     allStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
@@ -137,7 +126,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
 
     // Check for empty/too-short recordings
     if (blob.size < MIN_VALID_BLOB_SIZE) {
-      console.error('[offscreen] Recording too small:', blob.size, 'bytes — likely no audio was captured');
       chrome.runtime.sendMessage({
         type: 'UPLOAD_FAILED',
         meetingId: capturedMeetingId,
@@ -148,7 +136,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
 
     // Upload directly from offscreen (avoids Chrome message size limits)
     try {
-      console.log('[offscreen] Uploading', blob.size, 'bytes to server...');
       const formData = new FormData();
       formData.append('audio', blob, `${capturedMeetingId}.webm`);
       formData.append('meetingId', capturedMeetingId);
@@ -166,14 +153,12 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
       }
 
       const data = await res.json();
-      console.log('[offscreen] Upload successful, meetingId:', capturedMeetingId);
       chrome.runtime.sendMessage({
         type: 'UPLOAD_COMPLETE',
         meetingId: capturedMeetingId,
         processingUrl: data.processingUrl,
       });
     } catch (err) {
-      console.error('[offscreen] Upload error:', err);
       chrome.runtime.sendMessage({
         type: 'UPLOAD_FAILED',
         meetingId: capturedMeetingId,
@@ -184,14 +169,11 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
 
   // Collect data every 1 second for more granular chunks
   mediaRecorder.start(1000);
-  console.log('[offscreen] Recording started for meeting', meetingId, 'mimeType:', mimeType);
 }
 
 function handleStopRecording() {
   if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-    console.warn('[offscreen] No active recorder to stop');
     return;
   }
   mediaRecorder.stop();
-  console.log('[offscreen] Stop requested');
 }

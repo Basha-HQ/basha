@@ -4,6 +4,7 @@ import { queryOne } from '@/lib/db';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
 interface MeetingRow {
   id: string;
@@ -51,18 +52,36 @@ export async function POST(
     // Resolve audio to a Buffer
     let audioBuffer: Buffer;
     let fileName: string;
+
+    const allowedDirs = [
+      path.join(process.cwd(), 'public', 'uploads'),
+      path.join(os.tmpdir(), 'basha-extension'),
+    ];
+
+    function isAllowedPath(resolved: string) {
+      return allowedDirs.some((dir) => resolved.startsWith(dir + path.sep) || resolved === dir);
+    }
+
     if (meeting.audio_path.startsWith('http')) {
       const res = await fetch(meeting.audio_path);
       if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
       audioBuffer = Buffer.from(await res.arrayBuffer());
       fileName = path.basename(new URL(meeting.audio_path).pathname) || 'audio.wav';
     } else if (path.isAbsolute(meeting.audio_path)) {
-      audioBuffer = await readFile(meeting.audio_path);
-      fileName = path.basename(meeting.audio_path);
+      const resolved = path.resolve(meeting.audio_path);
+      if (!isAllowedPath(resolved)) {
+        return NextResponse.json({ error: 'Invalid audio path' }, { status: 400 });
+      }
+      audioBuffer = await readFile(resolved);
+      fileName = path.basename(resolved);
     } else {
       const audioFilePath = path.join(process.cwd(), 'public', meeting.audio_path);
-      audioBuffer = await readFile(audioFilePath);
-      fileName = path.basename(audioFilePath);
+      const resolved = path.resolve(audioFilePath);
+      if (!isAllowedPath(resolved)) {
+        return NextResponse.json({ error: 'Invalid audio path' }, { status: 400 });
+      }
+      audioBuffer = await readFile(resolved);
+      fileName = path.basename(resolved);
     }
 
     await processAudioForMeeting({
@@ -76,9 +95,6 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Processing error:', err);
-    return NextResponse.json(
-      { error: 'Processing failed', details: String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
   }
 }

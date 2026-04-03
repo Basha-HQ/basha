@@ -50,6 +50,9 @@ export async function PATCH(
       if (typeof k !== 'string' || typeof v !== 'string') {
         return NextResponse.json({ error: 'speaker_labels keys and values must be strings' }, { status: 400 });
       }
+      if (k.length > 50 || (v as string).length > 200) {
+        return NextResponse.json({ error: 'speaker_labels key or value too long' }, { status: 400 });
+      }
     }
   }
 

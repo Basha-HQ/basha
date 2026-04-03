@@ -24,14 +24,16 @@ import { getBot as getRecallBot } from '@/lib/recall/client';
 import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
 
 export async function POST(req: NextRequest) {
-  // Optional webhook secret verification
+  // Webhook secret verification — required in production
   const secret = process.env.RECALL_WEBHOOK_SECRET;
-  if (secret) {
-    const signature = req.headers.get('x-recall-signature') ?? '';
-    if (signature !== secret) {
-      console.warn('[webhook/recall] Invalid signature — request rejected');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!secret) {
+    console.error('[webhook/recall] RECALL_WEBHOOK_SECRET is not configured — rejecting request');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const signature = req.headers.get('x-recall-signature') ?? '';
+  if (signature !== secret) {
+    console.warn('[webhook/recall] Invalid signature — request rejected');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let payload: {

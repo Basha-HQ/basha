@@ -84,14 +84,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ botId: bot.id, meetingId });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[api/bots] Error:', message);
+    console.error('[api/bots] Error:', err);
 
     // Clean up the meeting record if something failed after creating it
     if (meetingId) {
       await query('DELETE FROM meetings WHERE id = $1', [meetingId]).catch(() => {});
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create bot' }, { status: 500 });
   }
 }

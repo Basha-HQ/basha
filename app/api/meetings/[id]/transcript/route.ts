@@ -22,8 +22,16 @@ export async function GET(
 
   const { id } = await params;
   const { searchParams } = new URL(req.url);
-  const searchQuery = searchParams.get('q')?.trim();
+  const rawSearch = searchParams.get('q')?.trim() ?? '';
   const download = searchParams.get('download') === 'true';
+
+  if (rawSearch.length > 200) {
+    return NextResponse.json({ error: 'Search query too long' }, { status: 400 });
+  }
+  // Escape ILIKE special characters so user input is treated as a literal string
+  const searchQuery = rawSearch.length > 0
+    ? rawSearch.replace(/[\\%_]/g, '\\$&')
+    : undefined;
 
   // Verify meeting ownership
   const meeting = await queryOne<MeetingRow>(
@@ -63,10 +71,11 @@ export async function GET(
   // Return as TXT file for download
   if (download) {
     const txt = transcriptToTxt(transcripts, meeting.title, meeting.created_at);
+    const safeId = id.replace(/[^a-z0-9-]/gi, '_');
     return new NextResponse(txt, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': `attachment; filename="transcript-${id}.txt"`,
+        'Content-Disposition': `attachment; filename="transcript-${safeId}.txt"`,
       },
     });
   }

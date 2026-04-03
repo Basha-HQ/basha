@@ -2,8 +2,9 @@
   "manifest_version": 3,
   "name": "Basha",
   "short_name": "Basha",
-  "description": "Record your Google Meet, Zoom, or Teams meeting silently. No bots. No invites. Transcribed in Hinglish, Tanglish & more.",
+  "description": "Record your Google Meet, Zoom, or Teams meeting with your consent. No bots. No invites. Transcribed in Hinglish, Tanglish & more.",
   "version": "1.0.0",
+  "privacy_policy_url": "https://trybasha.in/privacy",
 
   "permissions": [
     "tabCapture",
@@ -14,8 +15,7 @@
   ],
 
   "host_permissions": [
-    "https://trybasha.in/*",
-    "http://localhost:3000/*"
+    "https://trybasha.in/*"
   ],
 
   "background": {
@@ -54,8 +54,7 @@
     },
     {
       "matches": [
-        "https://trybasha.in/*",
-        "http://localhost:3000/*"
+        "https://trybasha.in/*"
       ],
       "js": ["content-script-app.js"],
       "run_at": "document_idle"

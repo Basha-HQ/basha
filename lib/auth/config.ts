@@ -131,7 +131,7 @@ export const authConfig: NextAuthConfig = {
     error: '/login',
   },
 
-  session: { strategy: 'jwt' },
+  session: { strategy: 'jwt', maxAge: 7 * 24 * 60 * 60 }, // 7 days
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

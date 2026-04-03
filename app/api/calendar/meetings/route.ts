@@ -62,7 +62,10 @@ export async function GET() {
   const expiry = user.google_token_expiry ? new Date(user.google_token_expiry).getTime() : 0;
   if (Date.now() >= expiry - 5 * 60 * 1000 && user.google_refresh_token) {
     const refreshed = await getRefreshedToken(user.google_refresh_token, session.user.id);
-    if (refreshed) token = refreshed;
+    if (!refreshed) {
+      return NextResponse.json({ meetings: [], connected: true, error: 'token_refresh_failed' });
+    }
+    token = refreshed;
   }
 
   const now = new Date().toISOString();

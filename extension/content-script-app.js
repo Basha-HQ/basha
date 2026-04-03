@@ -16,7 +16,7 @@ window.addEventListener('message', (event) => {
   if (event.data?.type === 'BASHA_PING') {
     window.postMessage(
       { type: 'BASHA_PONG', version: chrome.runtime.getManifest().version },
-      '*'
+      window.location.origin
     );
   }
 
@@ -31,7 +31,7 @@ window.addEventListener('message', (event) => {
         // Notify the web page that the token was stored successfully
         window.postMessage(
           { type: 'BASHA_TOKEN_STORED', success: resp?.success ?? false },
-          '*'
+          window.location.origin
         );
       }
     );

@@ -37,7 +37,7 @@ async function ensureOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_URL,
     reasons: ['USER_MEDIA'],
-    justification: 'Capture tab audio for meeting transcription',
+    justification: 'An offscreen document is required to access getUserMedia with a tabCapture streamId. The MediaRecorder API cannot be used directly in the service worker context, so audio mixing and recording must occur in an isolated offscreen page.',
   });
 }
 
@@ -163,11 +163,8 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
   try {
     const result = await chrome.tabs.sendMessage(tabId, { type: 'BASHA_GET_PARTICIPANTS' });
     participantNames = result?.participants ?? [];
-    if (participantNames.length > 0) {
-      console.log('[background] Captured participants from DOM:', participantNames);
-    }
-  } catch (err) {
-    console.warn('[background] Could not scrape participant names:', err.message);
+  } catch {
+    // Could not scrape participant names — non-fatal
   }
 
   // Create meeting record via API
@@ -231,7 +228,6 @@ async function stopRecording() {
 // ---------------------------------------------------------------------------
 
 async function handleUploadComplete({ meetingId }) {
-  console.log('[background] Upload complete for meeting:', meetingId);
   await setState({ status: 'processing', processingUrl: `/meetings/${meetingId}` });
   notifyPopup({ status: 'processing', meetingId, processingUrl: `/meetings/${meetingId}` });
 
@@ -243,8 +239,7 @@ async function handleUploadComplete({ meetingId }) {
   await closeOffscreenDocument();
 }
 
-async function handleUploadFailed({ meetingId, error }) {
-  console.error('[background] Upload/recording failed for', meetingId, ':', error);
+async function handleUploadFailed({ meetingId: _meetingId, error }) {
   await setState({ status: 'failed', error });
   notifyPopup({ status: 'failed', error });
   await closeOffscreenDocument();
@@ -270,8 +265,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       await setState({ status: data.status, processingUrl: data.meetingUrl });
       notifyPopup({ status: data.status, processingUrl: data.meetingUrl });
     }
-  } catch (err) {
-    console.error('[background] Status poll error:', err);
+  } catch {
+    // Status poll failed — will retry on next alarm
   }
 });
 
@@ -378,7 +373,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'MEETING_ENDED') {
     getState().then((state) => {
       if (state.isRecording) {
-        console.log('[background] Meeting ended signal — stopping recording');
         stopRecording();
       }
     });
@@ -410,7 +404,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const state = await getState();
   if (state.isRecording && state.tabId === tabId) {
-    console.log('[background] Meeting tab closed — stopping recording');
     await stopRecording();
   }
 });
