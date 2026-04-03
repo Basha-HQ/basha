@@ -2,229 +2,226 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Basha</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      width: 340px;
+      width: 300px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0f172a;
+      background: #0d0f1a;
       color: #e2e8f0;
       font-size: 14px;
+      min-height: 120px;
     }
 
+    /* ── Header ─────────────────────────────────────────── */
     .header {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 16px 16px 12px;
-      border-bottom: 1px solid #1e293b;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #1a1f35;
     }
-    .header-logo {
+    .logo {
       width: 28px; height: 28px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
       border-radius: 8px;
+      background: linear-gradient(135deg, #f59e0b, #f97316);
       display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
+      font-weight: 800; font-size: 14px; color: #07071a;
+      flex-shrink: 0;
     }
-    .header-title { font-weight: 700; font-size: 15px; }
-    .header-subtitle { font-size: 11px; color: #64748b; }
+    .header-name { font-weight: 700; font-size: 15px; }
 
-    .view { padding: 16px; display: none; flex-direction: column; gap: 14px; }
+    /* ── Views ───────────────────────────────────────────── */
+    .view { padding: 18px 16px; display: none; flex-direction: column; gap: 12px; }
     .view.active { display: flex; }
 
-    /* Auth view */
-    .auth-text { color: #94a3b8; font-size: 13px; line-height: 1.6; }
-    .btn-primary {
+    /* ── Buttons ─────────────────────────────────────────── */
+    .btn {
       display: block; width: 100%; padding: 10px 16px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: white; border: none; border-radius: 8px;
-      font-size: 14px; font-weight: 600; cursor: pointer;
-      text-align: center; text-decoration: none;
-      transition: opacity 0.15s;
+      border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; text-align: center;
+      text-decoration: none; transition: opacity 0.15s, border-color 0.15s;
     }
-    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      color: #07071a;
+    }
+    .btn-primary:hover { opacity: 0.88; }
 
-    .btn-secondary {
-      display: block; width: 100%; padding: 9px 16px;
+    .btn-ghost {
       background: transparent; color: #94a3b8;
-      border: 1px solid #334155; border-radius: 8px;
-      font-size: 13px; font-weight: 500; cursor: pointer;
-      text-align: center; transition: border-color 0.15s, color 0.15s;
+      border: 1px solid #1e293b;
     }
-    .btn-secondary:hover { border-color: #6366f1; color: #e2e8f0; }
+    .btn-ghost:hover { border-color: #334155; color: #cbd5e1; }
 
-    /* Not-meeting-tab banner */
-    .tab-hint {
-      background: #1e293b; border-radius: 8px; padding: 12px;
-      font-size: 12px; color: #94a3b8; line-height: 1.5; text-align: center;
+    .btn-record {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      color: #fff;
     }
-    .tab-hint strong { color: #e2e8f0; display: block; margin-bottom: 4px; }
+    .btn-record:hover { opacity: 0.9; }
 
-    /* Language pills */
-    .lang-label { font-size: 12px; color: #64748b; font-weight: 500; }
-    .lang-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-    .lang-pill {
-      padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
-      border: 1px solid #334155; background: transparent; color: #94a3b8;
-      cursor: pointer; transition: all 0.15s;
+    /* ── Platform badge ───────────────────────────────────── */
+    .platform-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 11px; color: #4ade80; font-weight: 500;
     }
-    .lang-pill:hover { border-color: #6366f1; color: #e2e8f0; }
-    .lang-pill.selected { border-color: #6366f1; background: #6366f120; color: #a5b4fc; }
+    .platform-dot {
+      width: 5px; height: 5px; background: #4ade80; border-radius: 50%;
+    }
 
-    /* Recording indicator */
-    .rec-badge {
-      display: flex; align-items: center; gap: 8px;
-      background: #1e293b; border: 1px solid #ef4444; border-radius: 8px; padding: 12px;
+    /* ── Idle (no meeting) ───────────────────────────────── */
+    .idle-hint {
+      font-size: 12px; color: #475569; line-height: 1.5; text-align: center;
+    }
+
+    /* ── Recording ───────────────────────────────────────── */
+    .rec-row {
+      display: flex; align-items: center; gap: 10px;
+      background: #0f172a; border: 1px solid #1e293b;
+      border-radius: 10px; padding: 12px 14px;
     }
     .rec-dot {
-      width: 10px; height: 10px; background: #ef4444; border-radius: 50%;
-      animation: pulse 1.2s infinite;
+      width: 9px; height: 9px; background: #ef4444; border-radius: 50%;
+      flex-shrink: 0; animation: pulse 1.2s infinite;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .rec-timer {
+      font-size: 20px; font-weight: 700;
+      font-variant-numeric: tabular-nums; line-height: 1;
     }
-    .rec-timer { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .rec-label { font-size: 12px; color: #94a3b8; }
+    .rec-label { font-size: 11px; color: #64748b; margin-top: 2px; }
 
-    .btn-stop {
-      display: block; width: 100%; padding: 10px 16px;
-      background: #ef4444; color: white; border: none; border-radius: 8px;
-      font-size: 14px; font-weight: 600; cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-stop:hover { background: #dc2626; }
-
-    /* Processing view */
-    .processing-wrap { text-align: center; padding: 8px 0; }
+    /* ── Processing ──────────────────────────────────────── */
+    .spin-wrap { text-align: center; padding: 4px 0; }
     .spinner {
-      width: 32px; height: 32px; border: 3px solid #1e293b;
-      border-top-color: #6366f1; border-radius: 50%;
-      animation: spin 0.9s linear infinite; margin: 0 auto 12px;
+      width: 28px; height: 28px;
+      border: 2.5px solid #1e293b; border-top-color: #7c3aed;
+      border-radius: 50%; animation: spin 0.85s linear infinite;
+      margin: 0 auto 10px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .processing-title { font-weight: 600; margin-bottom: 6px; }
-    .processing-sub { font-size: 12px; color: #64748b; }
+    .spin-title { font-weight: 600; font-size: 13px; }
+    .spin-sub { font-size: 11px; color: #475569; margin-top: 4px; }
 
-    /* Completed view */
-    .done-icon { text-align: center; font-size: 32px; margin-bottom: 4px; }
-    .done-title { text-align: center; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
-    .done-sub { text-align: center; font-size: 12px; color: #64748b; margin-bottom: 2px; }
+    /* ── Done ────────────────────────────────────────────── */
+    .done-check {
+      width: 36px; height: 36px; background: rgba(34,197,94,0.12);
+      border: 1.5px solid rgba(34,197,94,0.35);
+      border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; margin: 0 auto 2px;
+      font-size: 16px;
+    }
+    .done-title {
+      text-align: center; font-weight: 700; font-size: 14px;
+    }
 
-    /* Error view */
+    /* ── Auth ────────────────────────────────────────────── */
+    .auth-hint { font-size: 12px; color: #475569; line-height: 1.5; }
+
+    /* ── Error ───────────────────────────────────────────── */
     .error-box {
-      background: #1e293b; border: 1px solid #ef4444; border-radius: 8px;
-      padding: 12px; font-size: 12px; color: #fca5a5; line-height: 1.5;
+      background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px; padding: 10px 12px;
+      font-size: 12px; color: #fca5a5; line-height: 1.5;
     }
 
-    .divider { height: 1px; background: #1e293b; }
-
-    .meet-tab-badge {
-      display: inline-flex; align-items: center; gap: 5px;
-      background: #14532d20; border: 1px solid #16a34a; border-radius: 20px;
-      padding: 3px 10px; font-size: 11px; color: #4ade80;
+    /* ── Language selector ───────────────────────────────── */
+    .lang-row {
+      display: flex; align-items: center; justify-content: space-between;
     }
-    .meet-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; }
+    .lang-label { font-size: 11px; color: #64748b; }
+    .lang-select {
+      background: #111827; border: 1px solid #1e293b; color: #94a3b8;
+      border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer;
+      outline: none;
+    }
+    .lang-select:focus { border-color: #f59e0b; }
   </style>
 </head>
 <body>
 
+<!-- ── Header ───────────────────────────────────────────── -->
 <div class="header">
-  <div class="header-logo">🎙</div>
-  <div>
-    <div class="header-title">Basha</div>
-    <div class="header-subtitle">Bot-free meeting recorder</div>
-  </div>
+  <div class="logo">B</div>
+  <div class="header-name">Basha</div>
 </div>
 
-<!-- VIEW: not authed -->
+<!-- ── VIEW: not authenticated ──────────────────────────── -->
 <div id="view-auth" class="view">
-  <p class="auth-text">
-    Connect Basha to your account to start recording meetings.
-  </p>
-  <a id="btn-open-app" href="#" class="btn-primary" target="_blank">Open Basha to connect</a>
-  <p style="font-size:11px; color:#475569; text-align:center;">
-    Go to <strong>Settings → Integrations</strong> and click<br/>"Connect Chrome Extension"
+  <p class="auth-hint">Connect Basha to your account to start recording meetings.</p>
+  <a id="btn-open-app" href="#" class="btn btn-primary" target="_blank">Open Basha to connect</a>
+  <p style="font-size:11px;color:#334155;text-align:center;">
+    Settings → Integrations → Connect Chrome Extension
   </p>
 </div>
 
-<!-- VIEW: ready (on meeting tab) -->
+<!-- ── VIEW: no meeting tab detected ────────────────────── -->
+<div id="view-no-tab" class="view">
+  <p class="idle-hint">Open a Google Meet, Zoom, or Teams meeting and click the Basha icon to record.</p>
+  <button id="btn-open-meet" class="btn btn-ghost">Open Google Meet</button>
+</div>
+
+<!-- ── VIEW: meeting detected, ready to record ──────────── -->
 <div id="view-ready" class="view">
   <div>
-    <div class="meet-tab-badge"><div class="meet-dot"></div><span id="meeting-platform">Google Meet</span> detected</div>
-  </div>
-  <div>
-    <div class="lang-label" style="margin-bottom:8px;">Recording language</div>
-    <div class="lang-pills" id="lang-pills">
-      <button class="lang-pill selected" data-lang="auto">Auto</button>
-      <button class="lang-pill" data-lang="hi-IN">Hindi</button>
-      <button class="lang-pill" data-lang="ta-IN">Tamil</button>
-      <button class="lang-pill" data-lang="te-IN">Telugu</button>
-      <button class="lang-pill" data-lang="kn-IN">Kannada</button>
-      <button class="lang-pill" data-lang="en-IN">English</button>
+    <div class="platform-badge">
+      <div class="platform-dot"></div>
+      <span id="meeting-platform">Google Meet</span> detected
     </div>
   </div>
-  <button id="btn-start" class="btn-primary">🔴 Start Recording</button>
-</div>
-
-<!-- VIEW: not on meeting tab -->
-<div id="view-no-tab" class="view">
-  <div class="tab-hint">
-    <strong>No meeting tab detected</strong>
-    Open a Google Meet, Zoom, or Teams meeting in this browser window, then click the Basha icon.
+  <p style="font-size:12px;color:#64748b;">Ready to record — click below to start.</p>
+  <div class="lang-row">
+    <span class="lang-label">Language</span>
+    <select id="lang-select" class="lang-select">
+      <option value="auto">Auto-detect</option>
+      <option value="hi-IN">Hindi</option>
+      <option value="ta-IN">Tamil</option>
+      <option value="te-IN">Telugu</option>
+      <option value="kn-IN">Kannada</option>
+      <option value="en-IN">English</option>
+    </select>
   </div>
-  <button id="btn-open-meet" class="btn-secondary">Open Google Meet</button>
+  <button id="btn-start" class="btn btn-record">Start Recording</button>
 </div>
 
-<!-- VIEW: recording -->
+<!-- ── VIEW: recording active ───────────────────────────── -->
 <div id="view-recording" class="view">
-  <div class="rec-badge">
+  <div class="rec-row">
     <div class="rec-dot"></div>
     <div>
       <div class="rec-timer" id="rec-timer">0:00</div>
-      <div class="rec-label">Recording tab audio</div>
+      <div class="rec-label">Recording in progress</div>
     </div>
   </div>
-  <button id="btn-stop" class="btn-stop">⏹ Stop &amp; Process</button>
+  <button id="btn-stop" class="btn btn-ghost">Stop &amp; Process</button>
 </div>
 
-<!-- VIEW: uploading -->
-<div id="view-uploading" class="view">
-  <div class="processing-wrap">
-    <div class="spinner"></div>
-    <div class="processing-title">Uploading audio…</div>
-    <div class="processing-sub">Please keep this window open</div>
-  </div>
-</div>
-
-<!-- VIEW: processing -->
+<!-- ── VIEW: uploading / processing ─────────────────────── -->
 <div id="view-processing" class="view">
-  <div class="processing-wrap">
+  <div class="spin-wrap">
     <div class="spinner"></div>
-    <div class="processing-title">Transcribing your meeting</div>
-    <div class="processing-sub" id="proc-sub">Sarvam AI is processing your Hinglish / Tanglish audio…</div>
+    <div class="spin-title" id="proc-title">Uploading audio…</div>
+    <div class="spin-sub" id="proc-sub">This may take a moment</div>
   </div>
-  <a id="btn-open-meeting" href="#" class="btn-secondary" target="_blank" style="display:none;">
-    Open meeting notes →
-  </a>
 </div>
 
-<!-- VIEW: completed -->
-<div id="view-completed" class="view">
-  <div class="done-icon">✅</div>
-  <div class="done-title">Transcript ready!</div>
-  <div class="done-sub">Your dual transcript (original + English) is ready.</div>
-  <a id="btn-view-notes" href="#" class="btn-primary" target="_blank">View meeting notes →</a>
-  <button id="btn-record-another" class="btn-secondary">Record another meeting</button>
+<!-- ── VIEW: transcript ready ───────────────────────────── -->
+<div id="view-done" class="view">
+  <div class="done-check">✓</div>
+  <div class="done-title">Transcript ready</div>
+  <a id="btn-view-notes" href="#" class="btn btn-primary" target="_blank">View meeting notes →</a>
+  <button id="btn-new-recording" class="btn btn-ghost">Record another meeting</button>
 </div>
 
-<!-- VIEW: failed -->
+<!-- ── VIEW: failed ─────────────────────────────────────── -->
 <div id="view-failed" class="view">
   <div class="error-box" id="error-msg">Something went wrong.</div>
-  <button id="btn-retry" class="btn-secondary">Try again</button>
+  <button id="btn-retry" class="btn btn-ghost">Try again</button>
 </div>
 
 <script src="popup.js"></script>

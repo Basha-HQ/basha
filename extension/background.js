@@ -169,6 +169,7 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
       sourceLanguage,
       meetingUrl,
       participantNames,
+      startedAt: new Date().toISOString(),
     });
     meetingId = data.meetingId;
   } catch (err) {
@@ -311,6 +312,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  // Content script: meeting call ended (user left the call)
+  if (message.type === 'MEETING_ENDED') {
+    getState().then((state) => {
+      if (state.isRecording) {
+        console.log('[background] Meeting ended signal — stopping recording');
+        stopRecording();
+      }
+    });
+    return false;
+  }
+
   // Messages from offscreen document
   if (message.type === 'UPLOAD_COMPLETE') {
     handleUploadComplete(message).then(() => sendResponse({ success: true }));
@@ -330,7 +342,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
-// Tab close / navigation — auto-stop recording if the meeting tab closes
+// Tab close — auto-stop recording if the meeting tab closes
 // ---------------------------------------------------------------------------
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -339,4 +351,32 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     console.log('[background] Meeting tab closed — stopping recording');
     await stopRecording();
   }
+});
+
+// ---------------------------------------------------------------------------
+// Badge — show a dot on the extension icon when on a meeting page (not recording)
+// ---------------------------------------------------------------------------
+
+const MEETING_URL_RE = /meet\.google\.com\/[a-z]|zoom\.us\/j\/|teams\.microsoft\.com/;
+
+async function updateBadgeForTab(tabId, url) {
+  if (!url) return;
+  const state = await getState();
+  if (state.isRecording) return; // don't override recording badge
+
+  if (MEETING_URL_RE.test(url)) {
+    chrome.action.setBadgeText({ text: '●', tabId });
+    chrome.action.setBadgeBackgroundColor({ color: '#f59e0b', tabId });
+  } else {
+    chrome.action.setBadgeText({ text: '', tabId });
+  }
+}
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (tab?.url) updateBadgeForTab(tabId, tab.url);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url) updateBadgeForTab(tabId, changeInfo.url);
 });

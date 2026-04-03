@@ -1,21 +1,16 @@
 /**
  * Basha Chrome Extension — Popup script (popup.js)
- *
- * Manages the 6-state popup UI and delegates recording control to background.js.
  */
 
-const APP_ORIGINS = [
-  'https://trybasha.in',
-];
+const APP_ORIGINS = ['https://trybasha.in'];
 
 const MEETING_PATTERNS = [
-  { re: /meet\.google\.com/, label: 'Google Meet' },
+  { re: /meet\.google\.com\/[a-z]/, label: 'Google Meet' },
   { re: /zoom\.us\/j\//, label: 'Zoom' },
   { re: /teams\.microsoft\.com/, label: 'Microsoft Teams' },
 ];
 
 let timerInterval = null;
-let selectedLang = 'auto';
 let currentMeetingUrl = '';
 
 // ---------------------------------------------------------------------------
@@ -29,9 +24,7 @@ function showView(id) {
 
 function send(type, data = {}) {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type, ...data }, (resp) => {
-      resolve(resp || {});
-    });
+    chrome.runtime.sendMessage({ type, ...data }, (resp) => resolve(resp || {}));
   });
 }
 
@@ -45,73 +38,12 @@ function startTimer(startedAt) {
   if (timerInterval) clearInterval(timerInterval);
   const el = document.getElementById('rec-timer');
   timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-    el.textContent = formatTime(elapsed);
+    el.textContent = formatTime(Math.floor((Date.now() - startedAt) / 1000));
   }, 1000);
 }
 
 function stopTimer() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-}
-
-// ---------------------------------------------------------------------------
-// Init — detect active tab, check auth, show correct view
-// ---------------------------------------------------------------------------
-
-async function init() {
-  const { authed } = await send('CHECK_AUTH');
-  if (!authed) {
-    // Show auth view with correct app origin link
-    const { appOrigin } = await chrome.storage.local.get('appOrigin');
-    const origin = appOrigin || APP_ORIGINS[0];
-    document.getElementById('btn-open-app').href = `${origin}/dashboard/settings`;
-    showView('view-auth');
-    return;
-  }
-
-  // Check if already recording/processing
-  const state = await send('GET_STATE');
-  if (state.status === 'recording' && state.isRecording) {
-    showView('view-recording');
-    startTimer(state.startedAt);
-    return;
-  }
-  if (state.status === 'uploading') { showView('view-uploading'); return; }
-  if (state.status === 'processing') {
-    showView('view-processing');
-    if (state.processingUrl) {
-      const origin = await getOrigin();
-      const link = document.getElementById('btn-open-meeting');
-      link.href = `${origin}${state.processingUrl}`;
-      link.style.display = 'block';
-    }
-    return;
-  }
-  if (state.status === 'completed') {
-    showView('view-completed');
-    if (state.processingUrl) {
-      const origin = await getOrigin();
-      document.getElementById('btn-view-notes').href = `${origin}${state.processingUrl}`;
-    }
-    return;
-  }
-  if (state.status === 'failed') {
-    showView('view-failed');
-    document.getElementById('error-msg').textContent = state.error || 'Something went wrong.';
-    return;
-  }
-
-  // Not recording — check if current tab is a meeting
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const matchedPlatform = MEETING_PATTERNS.find(({ re }) => re.test(tab?.url || ''));
-
-  if (matchedPlatform) {
-    currentMeetingUrl = tab.url;
-    document.getElementById('meeting-platform').textContent = matchedPlatform.label;
-    showView('view-ready');
-  } else {
-    showView('view-no-tab');
-  }
 }
 
 async function getOrigin() {
@@ -120,16 +52,80 @@ async function getOrigin() {
 }
 
 // ---------------------------------------------------------------------------
-// Language pill selection
+// After "View Notes" or "New Recording" — reset to idle
 // ---------------------------------------------------------------------------
 
-document.getElementById('lang-pills').addEventListener('click', (e) => {
-  const pill = e.target.closest('.lang-pill');
-  if (!pill) return;
-  document.querySelectorAll('.lang-pill').forEach((p) => p.classList.remove('selected'));
-  pill.classList.add('selected');
-  selectedLang = pill.dataset.lang;
-});
+async function resetToIdleState() {
+  stopTimer();
+  await chrome.storage.session.remove(['status', 'meetingId', 'processingUrl', 'error']);
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const matched = MEETING_PATTERNS.find(({ re }) => re.test(tab?.url || ''));
+  if (matched) {
+    currentMeetingUrl = tab.url;
+    document.getElementById('meeting-platform').textContent = matched.label;
+    showView('view-ready');
+  } else {
+    showView('view-no-tab');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+async function init() {
+  const { authed } = await send('CHECK_AUTH');
+  if (!authed) {
+    const origin = await getOrigin();
+    document.getElementById('btn-open-app').href = `${origin}/dashboard/settings`;
+    showView('view-auth');
+    return;
+  }
+
+  const state = await send('GET_STATE');
+
+  if (state.isRecording && state.status === 'recording') {
+    showView('view-recording');
+    startTimer(state.startedAt);
+    return;
+  }
+  if (state.status === 'uploading') {
+    document.getElementById('proc-title').textContent = 'Uploading audio…';
+    document.getElementById('proc-sub').textContent = 'Please keep this window open';
+    showView('view-processing');
+    return;
+  }
+  if (state.status === 'processing') {
+    document.getElementById('proc-title').textContent = 'Transcribing your meeting';
+    document.getElementById('proc-sub').textContent = 'Sarvam AI is processing the audio…';
+    showView('view-processing');
+    return;
+  }
+  if (state.status === 'completed') {
+    if (state.processingUrl) {
+      const origin = await getOrigin();
+      document.getElementById('btn-view-notes').href = `${origin}${state.processingUrl}`;
+    }
+    showView('view-done');
+    return;
+  }
+  if (state.status === 'failed') {
+    document.getElementById('error-msg').textContent = state.error || 'Something went wrong.';
+    showView('view-failed');
+    return;
+  }
+
+  // Idle — check current tab
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const matched = MEETING_PATTERNS.find(({ re }) => re.test(tab?.url || ''));
+  if (matched) {
+    currentMeetingUrl = tab.url;
+    document.getElementById('meeting-platform').textContent = matched.label;
+    showView('view-ready');
+  } else {
+    showView('view-no-tab');
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Start recording
@@ -138,21 +134,19 @@ document.getElementById('lang-pills').addEventListener('click', (e) => {
 document.getElementById('btn-start').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  // Check if microphone permission is already granted.
-  // We can't request it from the popup (popup closes when the prompt appears).
-  // If not granted, open a dedicated tab for one-time mic setup.
   try {
     const micStatus = await navigator.permissions.query({ name: 'microphone' });
     if (micStatus.state !== 'granted') {
-      // Open mic permission page in a new tab — user grants once, then it persists
       chrome.tabs.create({ url: chrome.runtime.getURL('mic-permission.html') });
-      return; // User will click Start Recording again after granting
+      return;
     }
-  } catch {
-    // permissions.query not supported — try to proceed anyway
-  }
+  } catch { /* proceed anyway */ }
 
-  showView('view-uploading'); // Optimistic feedback while we wait
+  const selectedLang = document.getElementById('lang-select').value;
+
+  document.getElementById('proc-title').textContent = 'Starting recording…';
+  document.getElementById('proc-sub').textContent = 'Connecting to meeting audio';
+  showView('view-processing');
 
   const result = await send('START_RECORDING', {
     tabId: tab.id,
@@ -161,8 +155,8 @@ document.getElementById('btn-start').addEventListener('click', async () => {
   });
 
   if (result.error) {
-    showView('view-failed');
     document.getElementById('error-msg').textContent = result.error;
+    showView('view-failed');
     return;
   }
 
@@ -176,7 +170,9 @@ document.getElementById('btn-start').addEventListener('click', async () => {
 
 document.getElementById('btn-stop').addEventListener('click', async () => {
   stopTimer();
-  showView('view-uploading');
+  document.getElementById('proc-title').textContent = 'Uploading audio…';
+  document.getElementById('proc-sub').textContent = 'Please keep this window open';
+  showView('view-processing');
   await send('STOP_RECORDING');
 });
 
@@ -188,42 +184,49 @@ document.getElementById('btn-open-meet').addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://meet.google.com' });
 });
 
-document.getElementById('btn-record-another').addEventListener('click', async () => {
-  await chrome.storage.session.clear();
-  window.location.reload();
+document.getElementById('btn-view-notes').addEventListener('click', () => {
+  // Link opens in new tab (target=_blank); then reset popup to idle
+  setTimeout(() => resetToIdleState(), 100);
 });
 
-document.getElementById('btn-retry').addEventListener('click', async () => {
-  await chrome.storage.session.clear();
-  window.location.reload();
+document.getElementById('btn-new-recording').addEventListener('click', () => {
+  resetToIdleState();
+});
+
+document.getElementById('btn-retry').addEventListener('click', () => {
+  resetToIdleState();
 });
 
 // ---------------------------------------------------------------------------
 // Listen for state updates from background
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener(async (message) => {
   if (message.type !== 'STATE_UPDATE') return;
 
-  if (message.status === 'recording' && message.isRecording) {
+  if (message.isRecording && message.status === 'recording') {
     showView('view-recording');
     startTimer(message.startedAt);
   } else if (message.status === 'uploading') {
     stopTimer();
-    showView('view-uploading');
+    document.getElementById('proc-title').textContent = 'Uploading audio…';
+    document.getElementById('proc-sub').textContent = 'Please keep this window open';
+    showView('view-processing');
   } else if (message.status === 'processing') {
+    document.getElementById('proc-title').textContent = 'Transcribing your meeting';
+    document.getElementById('proc-sub').textContent = 'Sarvam AI is processing the audio…';
     showView('view-processing');
   } else if (message.status === 'completed') {
-    showView('view-completed');
+    stopTimer();
     if (message.processingUrl) {
-      getOrigin().then((origin) => {
-        document.getElementById('btn-view-notes').href = `${origin}${message.processingUrl}`;
-      });
+      const origin = await getOrigin();
+      document.getElementById('btn-view-notes').href = `${origin}${message.processingUrl}`;
     }
+    showView('view-done');
   } else if (message.status === 'failed') {
     stopTimer();
-    showView('view-failed');
     document.getElementById('error-msg').textContent = message.error || 'Something went wrong.';
+    showView('view-failed');
   } else if (message.authed) {
     init();
   }
