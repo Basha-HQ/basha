@@ -237,8 +237,13 @@ function setupMeetingEndDetection() {
       wasInCall = false;
       chrome.runtime.sendMessage({ type: 'MEETING_ENDED' });
     }
-    // If navigated back into a call (e.g. rejoin), reset
-    if (!wasInCall && nowInCall) wasInCall = true;
+    // SPA navigation into a call (e.g. from meet.google.com home → meeting room)
+    if (!wasInCall && nowInCall) {
+      wasInCall = true;
+      chrome.storage.session.get(['isRecording'], ({ isRecording }) => {
+        if (!isRecording) showRecordingPrompt();
+      });
+    }
   });
 
   // Observe <title> changes — Google Meet updates document.title when call ends
