@@ -15,22 +15,6 @@ const TOAST_ID = 'basha-start-toast';
 const PROMPT_ID = 'basha-record-prompt';
 
 let promptDismissed = false;
-let recordingRetryInterval = null;
-
-function startRecordingRetry(meetingUrl) {
-  if (recordingRetryInterval) return;
-  recordingRetryInterval = setInterval(() => {
-    console.log('[basha] retrying AUTO_START_RECORDING for', meetingUrl);
-    chrome.runtime.sendMessage({ type: 'AUTO_START_RECORDING', meetingUrl, isRetry: true });
-  }, 3000);
-}
-
-function stopRecordingRetry() {
-  if (recordingRetryInterval) {
-    clearInterval(recordingRetryInterval);
-    recordingRetryInterval = null;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Participant name scraping (Google Meet)
@@ -190,7 +174,6 @@ function showRecordingPrompt() {
   });
 
   el.querySelector('.b-btn-dismiss').addEventListener('click', () => {
-    stopRecordingRetry();
     dismissPrompt();
   });
 }
@@ -209,6 +192,78 @@ function dismissPrompt() {
 function removeRecordingPrompt() {
   document.getElementById(PROMPT_ID)?.remove();
   document.getElementById(PROMPT_ID + '-style')?.remove();
+}
+
+// One-tap prompt shown after joining from waiting room — provides fresh user gesture for tabCapture
+function showRecordNowPrompt() {
+  if (document.getElementById(PROMPT_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = PROMPT_ID + '-style';
+  style.textContent = `
+    #${PROMPT_ID} {
+      position: fixed; top: 24px; left: 50%;
+      transform: translateX(-50%) translateY(0);
+      z-index: 99999;
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(13,15,26,0.97);
+      border: 1px solid rgba(245,158,11,0.4);
+      border-radius: 24px; padding: 8px 8px 8px 10px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px; font-weight: 500; color: #e2e8f0;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+      animation: basha-prompt-in 0.3s ease-out;
+      white-space: nowrap;
+      transition: opacity 0.3s ease;
+    }
+    #${PROMPT_ID}.basha-hiding { opacity: 0; pointer-events: none; }
+    #${PROMPT_ID} .b-logo {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 11px; color: #07071a; flex-shrink: 0;
+    }
+    #${PROMPT_ID} .b-btn-record {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      border: none; border-radius: 14px;
+      padding: 5px 12px; font-size: 11px; font-weight: 700;
+      color: #07071a; cursor: pointer; flex-shrink: 0;
+    }
+    #${PROMPT_ID} .b-btn-dismiss {
+      background: transparent; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px; padding: 5px 10px;
+      font-size: 11px; font-weight: 500; color: #94a3b8;
+      cursor: pointer; flex-shrink: 0;
+    }
+    @keyframes basha-prompt-in {
+      from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+  `;
+  document.head.appendChild(style);
+
+  const el = document.createElement('div');
+  el.id = PROMPT_ID;
+  el.innerHTML = `
+    <div class="b-logo">B</div>
+    <span class="b-text">You're in — start recording now?</span>
+    <button class="b-btn-record">Start</button>
+    <button class="b-btn-dismiss">Cancel</button>
+  `;
+  document.body.appendChild(el);
+
+  el.querySelector('.b-btn-record').addEventListener('click', () => {
+    el.querySelector('.b-text').textContent = 'Starting…';
+    el.querySelector('.b-btn-record').style.display = 'none';
+    el.querySelector('.b-btn-dismiss').style.display = 'none';
+    chrome.runtime.sendMessage({ type: 'CONFIRM_START_RECORDING' });
+    setTimeout(() => dismissPrompt(), 1500);
+  });
+
+  el.querySelector('.b-btn-dismiss').addEventListener('click', () => {
+    chrome.storage.session.remove('pendingRecord');
+    dismissPrompt();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -280,30 +335,30 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ participants: scrapeParticipants() });
   }
   if (message.type === 'RECORDING_STARTED_FROM_PROMPT') {
-    stopRecordingRetry();
     removeRecordingPrompt();
   }
   if (message.type === 'RECORDING_QUEUED') {
-    // Waiting room — update prompt to "queued" state and retry every 3s
+    // Waiting room — update prompt to show queued state
     const el = document.getElementById(PROMPT_ID);
     if (el) {
       el.querySelector('.b-text').textContent = 'Will record when you join';
       el.querySelector('.b-btn-record').style.display = 'none';
       el.querySelector('.b-btn-dismiss').textContent = 'Cancel';
     }
-    startRecordingRetry(message.meetingUrl);
+  }
+  if (message.type === 'SHOW_RECORD_NOW') {
+    // User has joined the meeting — show a one-tap confirm button
+    // (new user gesture needed for tabCapture)
+    removeRecordingPrompt();
+    promptDismissed = false;
+    showRecordNowPrompt();
   }
   if (message.type === 'AUTO_START_FAILED') {
-    // Only a first-attempt hard fail (bad token etc) — stop and show error
-    stopRecordingRetry();
     const el = document.getElementById(PROMPT_ID);
     if (el) {
       el.querySelector('.b-text').textContent = message.error || 'Could not start — check extension token';
       el.querySelector('.b-btn-record').style.display = 'none';
       el.querySelector('.b-btn-dismiss').textContent = 'Dismiss';
-    } else {
-      // Prompt already gone — show a brief console note
-      console.warn('[basha] AUTO_START_FAILED:', message.error);
     }
   }
 });
@@ -332,7 +387,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'session') return;
   if ('isRecording' in changes) {
     if (changes.isRecording.newValue) {
-      stopRecordingRetry();
       removeStartToast();
       removeRecordingPrompt();
       createIndicator();

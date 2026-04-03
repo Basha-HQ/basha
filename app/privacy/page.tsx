@@ -30,8 +30,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Meeting audio:</strong> Audio recorded during your meetings via the Chrome
-            extension or uploaded manually. Audio is captured only when you explicitly start
-            recording.
+            extension or uploaded manually. This includes tab audio (other meeting participants)
+            and optionally your microphone audio. Audio is captured only when you explicitly click
+            Start Recording and stops immediately when you click Stop.
           </li>
           <li>
             <strong>Transcripts and summaries:</strong> Text generated from your meeting audio,
@@ -65,6 +66,12 @@ export default function PrivacyPage() {
         </ul>
         <p className="mt-3">
           We do not sell your data. We do not use your data to train AI models.
+        </p>
+        <p className="mt-3 font-medium text-gray-900">
+          Limited Use: Basha&apos;s use of data obtained through the Chrome extension is limited to
+          providing and improving the meeting transcription and summarisation service. We do not
+          transfer, use, or sell this data for serving advertisements, for credit assessment, or
+          for any purpose unrelated to transcription and summarisation.
         </p>
       </section>
 

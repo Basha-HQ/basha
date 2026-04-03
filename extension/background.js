@@ -315,38 +315,55 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  // Content script: user clicked "Record" in the in-page prompt (initial or retry)
+  // Content script: user clicked "Record" in the in-page prompt
   if (message.type === 'AUTO_START_RECORDING') {
     const tabId = _sender.tab?.id;
     const meetingUrl = message.meetingUrl;
-    const isRetry = message.isRetry || false;
     (async () => {
       const { lastSourceLanguage } = await chrome.storage.local.get('lastSourceLanguage');
-      console.log('[background] AUTO_START_RECORDING attempt, isRetry:', isRetry, 'tabId:', tabId);
       const result = await startRecording({
         tabId,
         sourceLanguage: lastSourceLanguage || 'auto',
         meetingUrl,
       });
-      console.log('[background] startRecording result:', result);
       if (result.success) {
         chrome.tabs.sendMessage(tabId, { type: 'RECORDING_STARTED_FROM_PROMPT' }).catch(() => {});
-      } else if (isRetry) {
-        // During retry loop — keep queued, never fail permanently
-        chrome.tabs.sendMessage(tabId, { type: 'RECORDING_QUEUED', meetingUrl }).catch(() => {});
       } else {
-        // First attempt — decide whether to queue or hard fail
         const isCaptureFail = result.error && (
           result.error.includes('not been invoked') ||
           result.error.includes('cannot be captured') ||
           result.error.includes('Could not capture')
         );
         if (isCaptureFail) {
-          chrome.tabs.sendMessage(tabId, { type: 'RECORDING_QUEUED', meetingUrl }).catch(() => {});
+          // Waiting room — store intent, fire when user joins
+          await chrome.storage.session.set({ pendingRecord: { tabId, meetingUrl } });
+          chrome.tabs.sendMessage(tabId, { type: 'RECORDING_QUEUED' }).catch(() => {});
         } else {
           chrome.tabs.sendMessage(tabId, { type: 'AUTO_START_FAILED', error: result.error }).catch(() => {});
         }
       }
+      sendResponse(result);
+    })();
+    return true;
+  }
+
+  // Content script: user tapped the "Tap to record" button after joining from waiting room
+  if (message.type === 'CONFIRM_START_RECORDING') {
+    const tabId = _sender.tab?.id;
+    (async () => {
+      const { pendingRecord } = await chrome.storage.session.get('pendingRecord');
+      if (!pendingRecord) return sendResponse({ error: 'No pending record intent' });
+      await chrome.storage.session.remove('pendingRecord');
+      const { lastSourceLanguage } = await chrome.storage.local.get('lastSourceLanguage');
+      const result = await startRecording({
+        tabId,
+        sourceLanguage: lastSourceLanguage || 'auto',
+        meetingUrl: pendingRecord.meetingUrl,
+      });
+      chrome.tabs.sendMessage(tabId, {
+        type: result.error ? 'AUTO_START_FAILED' : 'RECORDING_STARTED_FROM_PROMPT',
+        error: result.error,
+      }).catch(() => {});
       sendResponse(result);
     })();
     return true;
@@ -417,6 +434,21 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   if (tab?.url) updateBadgeForTab(tabId, tab.url);
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url) updateBadgeForTab(tabId, changeInfo.url);
+const ACTIVE_MEETING_RE = /meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}|zoom\.us\/(j|wc)\/\d|app\.zoom\.us\/wc\/\d|teams\.(microsoft|live)\.com.*\/(meet|call|meetings)\//;
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  if (changeInfo.url) {
+    updateBadgeForTab(tabId, changeInfo.url);
+
+    // If user had clicked Record in the waiting room, prompt them to confirm now that they've joined
+    if (ACTIVE_MEETING_RE.test(changeInfo.url)) {
+      const { pendingRecord } = await chrome.storage.session.get('pendingRecord');
+      if (pendingRecord && pendingRecord.tabId === tabId) {
+        // Small delay to let the meeting page fully load
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tabId, { type: 'SHOW_RECORD_NOW' }).catch(() => {});
+        }, 2000);
+      }
+    }
+  }
 });
