@@ -312,6 +312,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  // Content script: user clicked "Record" in the in-page prompt
+  if (message.type === 'AUTO_START_RECORDING') {
+    const tabId = _sender.tab?.id;
+    const meetingUrl = message.meetingUrl;
+    (async () => {
+      const { lastSourceLanguage } = await chrome.storage.local.get('lastSourceLanguage');
+      const result = await startRecording({
+        tabId,
+        sourceLanguage: lastSourceLanguage || 'auto',
+        meetingUrl,
+      });
+      chrome.tabs.sendMessage(tabId, {
+        type: result.error ? 'AUTO_START_FAILED' : 'RECORDING_STARTED_FROM_PROMPT',
+        error: result.error,
+      }).catch(() => {});
+      sendResponse(result);
+    })();
+    return true;
+  }
+
   // Content script: meeting call ended (user left the call)
   if (message.type === 'MEETING_ENDED') {
     getState().then((state) => {
@@ -357,7 +377,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 // Badge — show a dot on the extension icon when on a meeting page (not recording)
 // ---------------------------------------------------------------------------
 
-const MEETING_URL_RE = /meet\.google\.com\/[a-z]|zoom\.us\/j\/|teams\.microsoft\.com/;
+const MEETING_URL_RE = /meet\.google\.com\/[a-z]|zoom\.us\/(j|wc)\/|app\.zoom\.us|teams\.(microsoft|live)\.com/;
 
 async function updateBadgeForTab(tabId, url) {
   if (!url) return;

@@ -44,7 +44,10 @@
       "matches": [
         "https://meet.google.com/*",
         "https://*.zoom.us/j/*",
-        "https://teams.microsoft.com/*"
+        "https://zoom.us/wc/*",
+        "https://app.zoom.us/*",
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*"
       ],
       "js": ["content-script.js"],
       "run_at": "document_idle"

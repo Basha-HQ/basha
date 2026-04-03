@@ -12,6 +12,9 @@
 
 const INDICATOR_ID = 'basha-rec-indicator';
 const TOAST_ID = 'basha-start-toast';
+const PROMPT_ID = 'basha-record-prompt';
+
+let promptDismissed = false;
 
 // ---------------------------------------------------------------------------
 // Participant name scraping (Google Meet)
@@ -84,60 +87,119 @@ function removeIndicator() {
 }
 
 // ---------------------------------------------------------------------------
-// Start-recording prompt toast
+// Interactive record prompt
 // ---------------------------------------------------------------------------
 
-function showStartToast() {
-  if (document.getElementById(TOAST_ID)) return;
+function showRecordingPrompt() {
+  if (promptDismissed) return;
+  if (document.getElementById(PROMPT_ID)) return;
 
   const style = document.createElement('style');
-  style.id = TOAST_ID + '-style';
+  style.id = PROMPT_ID + '-style';
   style.textContent = `
-    #${TOAST_ID} {
+    #${PROMPT_ID} {
       position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%) translateY(0);
       z-index: 99999;
       display: flex; align-items: center; gap: 10px;
       background: rgba(13,15,26,0.97);
       border: 1px solid rgba(245,158,11,0.4);
-      border-radius: 24px; padding: 8px 16px 8px 10px;
+      border-radius: 24px; padding: 8px 8px 8px 10px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 12px; font-weight: 500; color: #e2e8f0;
       box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-      animation: basha-toast-in 0.3s ease-out, basha-toast-out 0.4s ease-in 5s forwards;
+      animation: basha-prompt-in 0.3s ease-out;
       white-space: nowrap;
+      transition: opacity 0.3s ease;
     }
-    #${TOAST_ID} .b-logo {
+    #${PROMPT_ID}.basha-hiding {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #${PROMPT_ID} .b-logo {
       width: 22px; height: 22px; border-radius: 6px;
       background: linear-gradient(135deg, #f59e0b, #f97316);
       display: flex; align-items: center; justify-content: center;
       font-weight: 800; font-size: 11px; color: #07071a; flex-shrink: 0;
     }
-    @keyframes basha-toast-in {
-      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
-      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #${PROMPT_ID} .b-text {
+      flex: 1;
     }
-    @keyframes basha-toast-out {
-      from { opacity: 1; transform: translateX(-50%) translateY(0); }
-      to   { opacity: 0; transform: translateX(-50%) translateY(10px); pointer-events: none; }
+    #${PROMPT_ID} .b-btn-record {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      border: none; border-radius: 14px;
+      padding: 5px 12px; font-size: 11px; font-weight: 700;
+      color: #07071a; cursor: pointer; flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+    #${PROMPT_ID} .b-btn-record:hover { opacity: 0.85; }
+    #${PROMPT_ID} .b-btn-dismiss {
+      background: transparent; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 14px; padding: 5px 10px;
+      font-size: 11px; font-weight: 500; color: #94a3b8;
+      cursor: pointer; flex-shrink: 0;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #${PROMPT_ID} .b-btn-dismiss:hover { border-color: rgba(255,255,255,0.35); color: #e2e8f0; }
+    @keyframes basha-prompt-in {
+      from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
     }
   `;
   document.head.appendChild(style);
 
   const el = document.createElement('div');
-  el.id = TOAST_ID;
+  el.id = PROMPT_ID;
   el.innerHTML = `
     <div class="b-logo">B</div>
-    <span>Click <strong>Basha</strong> in your toolbar to start recording</span>
+    <span class="b-text">Record this meeting?</span>
+    <button class="b-btn-record">Record</button>
+    <button class="b-btn-dismiss">Not now</button>
   `;
   document.body.appendChild(el);
 
-  // Remove after animation completes
-  setTimeout(() => {
-    document.getElementById(TOAST_ID)?.remove();
-    document.getElementById(TOAST_ID + '-style')?.remove();
-  }, 5500);
+  // Auto-dismiss after 10 seconds
+  const autoDismissTimer = setTimeout(() => dismissPrompt(), 10000);
+
+  el.querySelector('.b-btn-record').addEventListener('click', () => {
+    clearTimeout(autoDismissTimer);
+    // Show "Starting…" feedback
+    el.querySelector('.b-text').textContent = 'Starting…';
+    el.querySelector('.b-btn-record').style.display = 'none';
+    el.querySelector('.b-btn-dismiss').style.display = 'none';
+    chrome.runtime.sendMessage({
+      type: 'AUTO_START_RECORDING',
+      meetingUrl: location.href,
+    });
+    // Fade out after a beat
+    setTimeout(() => dismissPrompt(), 1500);
+  });
+
+  el.querySelector('.b-btn-dismiss').addEventListener('click', () => {
+    clearTimeout(autoDismissTimer);
+    dismissPrompt();
+  });
 }
+
+function dismissPrompt() {
+  promptDismissed = true;
+  const el = document.getElementById(PROMPT_ID);
+  if (!el) return;
+  el.classList.add('basha-hiding');
+  setTimeout(() => {
+    el.remove();
+    document.getElementById(PROMPT_ID + '-style')?.remove();
+  }, 320);
+}
+
+function removeRecordingPrompt() {
+  document.getElementById(PROMPT_ID)?.remove();
+  document.getElementById(PROMPT_ID + '-style')?.remove();
+}
+
+// ---------------------------------------------------------------------------
+// Legacy passive toast (kept for reference, replaced by interactive prompt)
+// ---------------------------------------------------------------------------
 
 function removeStartToast() {
   document.getElementById(TOAST_ID)?.remove();
@@ -196,6 +258,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'BASHA_GET_PARTICIPANTS') {
     sendResponse({ participants: scrapeParticipants() });
   }
+  if (message.type === 'RECORDING_STARTED_FROM_PROMPT') {
+    removeRecordingPrompt();
+  }
+  if (message.type === 'AUTO_START_FAILED') {
+    // Restore prompt state to show error briefly then dismiss
+    const el = document.getElementById(PROMPT_ID);
+    if (el) {
+      el.querySelector('.b-text').textContent = message.error || 'Could not start — check extension token';
+      setTimeout(() => dismissPrompt(), 3000);
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -206,9 +279,9 @@ chrome.storage.session.get(['isRecording'], ({ isRecording }) => {
   if (isRecording) {
     createIndicator();
   } else {
-    // Show the start-recording prompt once when user is actively in a call
+    // Show the interactive record prompt when user is actively in a call
     if (isOnActiveMeetingPage()) {
-      showStartToast();
+      showRecordingPrompt();
     }
   }
 });
@@ -218,6 +291,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if ('isRecording' in changes) {
     if (changes.isRecording.newValue) {
       removeStartToast();
+      removeRecordingPrompt();
       createIndicator();
     } else {
       removeIndicator();

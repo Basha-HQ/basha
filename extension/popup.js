@@ -6,8 +6,8 @@ const APP_ORIGINS = ['https://trybasha.in'];
 
 const MEETING_PATTERNS = [
   { re: /meet\.google\.com\/[a-z]/, label: 'Google Meet' },
-  { re: /zoom\.us\/j\//, label: 'Zoom' },
-  { re: /teams\.microsoft\.com/, label: 'Microsoft Teams' },
+  { re: /zoom\.us\/(j|wc)\/|app\.zoom\.us/, label: 'Zoom' },
+  { re: /teams\.(microsoft|live)\.com/, label: 'Microsoft Teams' },
 ];
 
 let timerInterval = null;
@@ -143,6 +143,7 @@ document.getElementById('btn-start').addEventListener('click', async () => {
   } catch { /* proceed anyway */ }
 
   const selectedLang = document.getElementById('lang-select').value;
+  chrome.storage.local.set({ lastSourceLanguage: selectedLang });
 
   document.getElementById('proc-title').textContent = 'Starting recording…';
   document.getElementById('proc-sub').textContent = 'Connecting to meeting audio';
