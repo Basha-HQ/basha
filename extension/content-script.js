@@ -227,32 +227,34 @@ function isOnActiveMeetingPage() {
   return false;
 }
 
-function setupMeetingEndDetection() {
-  // Watch for Google Meet navigating back to the home screen (call ended)
+function setupMeetingDetection() {
   let wasInCall = isOnActiveMeetingPage();
 
-  const observer = new MutationObserver(() => {
+  function checkCallState() {
     const nowInCall = isOnActiveMeetingPage();
     if (wasInCall && !nowInCall) {
       wasInCall = false;
       chrome.runtime.sendMessage({ type: 'MEETING_ENDED' });
     }
-    // SPA navigation into a call (e.g. from meet.google.com home → meeting room)
     if (!wasInCall && nowInCall) {
       wasInCall = true;
       chrome.storage.session.get(['isRecording'], ({ isRecording }) => {
         if (!isRecording) showRecordingPrompt();
       });
     }
-  });
+  }
 
-  // Observe <title> changes — Google Meet updates document.title when call ends
+  // MutationObserver for title/body changes (covers some navigation)
+  const observer = new MutationObserver(checkCallState);
   const titleEl = document.querySelector('title');
   if (titleEl) {
     observer.observe(titleEl, { childList: true, subtree: true, characterData: true });
   }
-  // Also observe body for structural changes (Teams/Zoom overlay)
   observer.observe(document.body, { childList: true, subtree: false });
+
+  // Poll URL every 2s — catches SPA navigation via history.pushState
+  // that doesn't trigger DOM mutations (Google Meet does this)
+  setInterval(checkCallState, 2000);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,5 +306,5 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// Start meeting-end watcher
-setupMeetingEndDetection();
+// Start meeting detection (enter + exit)
+setupMeetingDetection();
