@@ -85,7 +85,7 @@ function createIndicator() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #${INDICATOR_ID} .dot {
-      width: 14px; height: 14px; background: #ef4444; border-radius: 50%;
+      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
       flex-shrink: 0;
       animation: basha-blink 1s step-start infinite;
     }
