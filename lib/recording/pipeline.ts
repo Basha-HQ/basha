@@ -51,10 +51,12 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // Resolve language for translation.
     // User-set source_language takes priority — Sarvam STT often returns 'en-IN'
     // for code-mixed speech (e.g. Tanglish) which would incorrectly skip translation.
+    // In 'translit' mode, language_code is always 'en-IN' regardless of actual speech
+    // language, so we must not use it as a fallback — keep 'auto' to force a translation attempt.
     const detectedLang =
       (sourceLanguage && sourceLanguage !== 'auto')
         ? sourceLanguage
-        : (sttResult.language_code && sttResult.language_code !== 'unknown'
+        : (sttResult.language_code && sttResult.language_code !== 'unknown' && sttMode !== 'translit'
             ? sttResult.language_code
             : 'auto');
 
