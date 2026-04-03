@@ -15,6 +15,21 @@ const TOAST_ID = 'basha-start-toast';
 const PROMPT_ID = 'basha-record-prompt';
 
 let promptDismissed = false;
+let recordingRetryInterval = null;
+
+function startRecordingRetry(meetingUrl) {
+  if (recordingRetryInterval) return;
+  recordingRetryInterval = setInterval(() => {
+    chrome.runtime.sendMessage({ type: 'AUTO_START_RECORDING', meetingUrl });
+  }, 3000);
+}
+
+function stopRecordingRetry() {
+  if (recordingRetryInterval) {
+    clearInterval(recordingRetryInterval);
+    recordingRetryInterval = null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Participant name scraping (Google Meet)
@@ -173,6 +188,7 @@ function showRecordingPrompt() {
   });
 
   el.querySelector('.b-btn-dismiss').addEventListener('click', () => {
+    stopRecordingRetry();
     dismissPrompt();
   });
 }
@@ -262,14 +278,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ participants: scrapeParticipants() });
   }
   if (message.type === 'RECORDING_STARTED_FROM_PROMPT') {
+    stopRecordingRetry();
     removeRecordingPrompt();
   }
+  if (message.type === 'RECORDING_QUEUED') {
+    // Waiting room — update prompt to "queued" state and retry every 3s
+    const el = document.getElementById(PROMPT_ID);
+    if (el) {
+      el.querySelector('.b-text').textContent = 'Will record when you join';
+      el.querySelector('.b-btn-record').style.display = 'none';
+      el.querySelector('.b-btn-dismiss').textContent = 'Cancel';
+    }
+    startRecordingRetry(message.meetingUrl);
+  }
   if (message.type === 'AUTO_START_FAILED') {
-    // Restore prompt state to show error briefly then dismiss
+    stopRecordingRetry();
     const el = document.getElementById(PROMPT_ID);
     if (el) {
       el.querySelector('.b-text').textContent = message.error || 'Could not start — check extension token';
-      setTimeout(() => dismissPrompt(), 3000);
+      el.querySelector('.b-btn-record').style.display = 'none';
+      el.querySelector('.b-btn-dismiss').textContent = 'Dismiss';
     }
   }
 });
@@ -298,6 +326,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'session') return;
   if ('isRecording' in changes) {
     if (changes.isRecording.newValue) {
+      stopRecordingRetry();
       removeStartToast();
       removeRecordingPrompt();
       createIndicator();

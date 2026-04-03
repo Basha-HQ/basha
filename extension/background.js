@@ -326,10 +326,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sourceLanguage: lastSourceLanguage || 'auto',
         meetingUrl,
       });
-      chrome.tabs.sendMessage(tabId, {
-        type: result.error ? 'AUTO_START_FAILED' : 'RECORDING_STARTED_FROM_PROMPT',
-        error: result.error,
-      }).catch(() => {});
+      if (result.error && (
+        result.error.includes('not been invoked') ||
+        result.error.includes('cannot be captured') ||
+        result.error.includes('Could not capture')
+      )) {
+        // Waiting room — queue the recording intent, retry when user joins
+        chrome.tabs.sendMessage(tabId, { type: 'RECORDING_QUEUED', meetingUrl }).catch(() => {});
+      } else {
+        chrome.tabs.sendMessage(tabId, {
+          type: result.error ? 'AUTO_START_FAILED' : 'RECORDING_STARTED_FROM_PROMPT',
+          error: result.error,
+        }).catch(() => {});
+      }
       sendResponse(result);
     })();
     return true;
