@@ -4,7 +4,6 @@
   "short_name": "Basha",
   "description": "Record your Google Meet, Zoom, or Teams meeting with your consent. No bots. No invites. Transcribed in Hinglish, Tanglish & more.",
   "version": "1.0.0",
-  "privacy_policy_url": "https://trybasha.in/privacy",
 
   "permissions": [
     "tabCapture",
