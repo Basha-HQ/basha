@@ -27,24 +27,49 @@ const EXCLUDE_NAMES = new Set([
 
 function scrapeParticipants() {
   const names = new Set();
-  const selectors = ['.zWfAib', '.KF4T6b', '.cS7aqe', '.YTbUzc', '.dwSJ2e'];
-  for (const sel of selectors) {
-    document.querySelectorAll(sel).forEach((el) => {
-      const text = el.textContent?.trim() ?? '';
-      if (text.length >= 2 && text.length <= 80 && !EXCLUDE_NAMES.has(text.toLowerCase())) {
-        names.add(text);
+
+  // Approach 1: data-participant-id / data-requested-participant-id tiles (most stable — data
+  // attributes are not obfuscated by Google's build tooling unlike class names).
+  document.querySelectorAll('[data-participant-id], [data-requested-participant-id]').forEach((tile) => {
+    // aria-label on the tile often contains the full name (e.g. "Alice Johnson (Muted)")
+    const label = tile.getAttribute('aria-label');
+    if (label && label.length >= 2 && label.length <= 80) {
+      const clean = label.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*,.*$/, '').trim();
+      if (clean.length >= 2 && !EXCLUDE_NAMES.has(clean.toLowerCase())) {
+        names.add(clean);
+        return;
       }
-    });
-  }
-  document.querySelectorAll('[data-participant-id]').forEach((tile) => {
-    for (const span of tile.querySelectorAll('span, div')) {
-      const text = span.textContent?.trim() ?? '';
-      if (text.length >= 2 && text.length <= 60 && !EXCLUDE_NAMES.has(text.toLowerCase()) && span.children.length === 0) {
+    }
+    // Walk leaf text nodes inside the tile — first non-trivial one is usually the name
+    const walker = document.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent?.trim() ?? '';
+      if (
+        text.length >= 2 &&
+        text.length <= 60 &&
+        !EXCLUDE_NAMES.has(text.toLowerCase()) &&
+        !/^\d+$/.test(text) // skip pure numbers (participant count badges etc.)
+      ) {
         names.add(text);
         break;
       }
     }
   });
+
+  // Approach 2: class-based selectors (Google Meet internal names — may change over time)
+  if (names.size === 0) {
+    const selectors = ['.zWfAib', '.KF4T6b', '.cS7aqe', '.YTbUzc', '.dwSJ2e'];
+    for (const sel of selectors) {
+      document.querySelectorAll(sel).forEach((el) => {
+        const text = el.textContent?.trim() ?? '';
+        if (text.length >= 2 && text.length <= 80 && !EXCLUDE_NAMES.has(text.toLowerCase())) {
+          names.add(text);
+        }
+      });
+    }
+  }
+
   return [...names];
 }
 

@@ -2,7 +2,6 @@ import { auth } from '@/lib/auth/config';
 import { query } from '@/lib/db';
 import Link from 'next/link';
 import { MeetingCard } from '@/components/meetings/MeetingCard';
-import { UpcomingMeetingsWidget } from '@/components/dashboard/UpcomingMeetingsWidget';
 
 interface Meeting {
   id: string;
@@ -12,6 +11,7 @@ interface Meeting {
   created_at: string;
   duration: number | null;
   source_language: string | null;
+  summary: string | null;
 }
 
 export const metadata = { title: 'Dashboard — Basha' };
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
   const extensionConnected = Number(extensionToken[0]?.count ?? 0) > 0;
 
   const recentMeetings = await query<Meeting>(
-    `SELECT id, title, platform, status, created_at, duration, source_language
+    `SELECT id, title, platform, status, created_at, duration, source_language, summary
      FROM meetings
      WHERE user_id = $1
      ORDER BY created_at DESC
@@ -333,13 +333,12 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {/* Upcoming / Getting started */}
-          <div className="animate-fade-up-4">
-            <h2 className="text-sm font-semibold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Upcoming
-            </h2>
-            <UpcomingMeetingsWidget fallback={quickStartPanel} />
-          </div>
+          {/* Getting started */}
+          {quickStartPanel && (
+            <div className="animate-fade-up-4">
+              {quickStartPanel}
+            </div>
+          )}
         </div>
       </div>
     </div>

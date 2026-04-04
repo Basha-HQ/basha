@@ -10,6 +10,7 @@ interface Meeting {
   created_at: string;
   duration: number | null;
   source_language: string | null;
+  summary: string | null;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -49,6 +50,16 @@ const LANG_BADGE_MAP: Record<string, string> = {
 function languageBadge(lang: string | null): string | null {
   if (!lang || lang === 'auto' || lang === 'unknown') return null;
   return LANG_BADGE_MAP[lang] ?? lang.split('-')[0].toUpperCase();
+}
+
+function extractOverview(summaryJson: string | null): string | null {
+  if (!summaryJson) return null;
+  try {
+    const parsed = JSON.parse(summaryJson);
+    return typeof parsed.overview === 'string' && parsed.overview.trim()
+      ? parsed.overview.trim()
+      : null;
+  } catch { return null; }
 }
 
 function platformLabel(platform: string): string {
@@ -112,6 +123,7 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
   const status = statusConfig(meeting.status);
   const duration = formatDuration(meeting.duration);
   const langLabel = languageBadge(meeting.source_language);
+  const overview = extractOverview(meeting.summary);
 
   return (
     <Link href={`/meetings/${meeting.id}`}>
@@ -138,6 +150,11 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
             <p className="font-medium text-sm truncate leading-snug" style={{ color: 'rgba(255,255,255,0.88)' }}>
               {meeting.title}
             </p>
+            {overview && (
+              <p className="text-[11px] mt-0.5 truncate font-light" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {overview}
+              </p>
+            )}
             <p
               className="text-[11px] mt-1 truncate font-light"
               style={{ color: 'rgba(255,255,255,0.32)', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.01em' }}
