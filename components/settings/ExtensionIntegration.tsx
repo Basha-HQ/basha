@@ -92,7 +92,7 @@ export function ExtensionIntegration() {
           </div>
         </div>
 
-        {!loading && meta?.exists && (
+        {!loading && meta?.exists && connected && (
           <span
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0"
             style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}

@@ -13,7 +13,7 @@ interface Meeting {
   source_language: string | null;
 }
 
-export const metadata = { title: 'Meeting History — LinguaMeet' };
+export const metadata = { title: 'Meeting History — Basha' };
 
 export default async function MeetingsPage() {
   const session = await auth();

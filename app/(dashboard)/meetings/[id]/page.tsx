@@ -36,7 +36,7 @@ interface TranscriptRow {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return { title: `Meeting ${id.slice(0, 8)} — LinguaMeet` };
+  return { title: `Meeting ${id.slice(0, 8)} — Basha` };
 }
 
 function platformLabel(p: string) {

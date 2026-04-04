@@ -55,7 +55,7 @@ function getHeaders() {
 /** Create a bot that joins the given meeting URL. */
 export async function createBot(
   meetingUrl: string,
-  botName = 'LinguaMeet Bot',
+  botName = 'Basha Bot',
   webhookUrl?: string
 ): Promise<RecallBot> {
   const body: Record<string, unknown> = {
