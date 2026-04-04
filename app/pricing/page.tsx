@@ -36,13 +36,13 @@ function Cell({ value }: { value: string | boolean }) {
   }
   if (value) {
     return (
-      <svg className="w-5 h-5 text-emerald-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
       </svg>
     );
   }
   return (
-    <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="rgba(255,255,255,0.2)" strokeWidth={2}>
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="rgba(255,255,255,0.2)" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
@@ -105,7 +105,9 @@ export default function PricingPage() {
               {FREE.map((f, i) => (
                 <li key={i} className="flex items-center justify-between gap-2">
                   <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{f.label}</span>
-                  <Cell value={f.value} />
+                  <span className="flex-shrink-0 flex justify-end" style={{ minWidth: '5rem' }}>
+                    <Cell value={f.value} />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -114,7 +116,7 @@ export default function PricingPage() {
           {/* Pro */}
           <div className="rounded-2xl p-8 relative" style={{ background: 'rgba(245,158,11,0.06)', border: '1.5px solid rgba(245,158,11,0.3)' }}>
             {/* Blurred content — all inner card elements */}
-            <div className="pointer-events-none select-none" style={{ filter: 'blur(3px)', opacity: 0.45 }}>
+            <div className="pointer-events-none select-none" style={{ filter: 'blur(7px)', opacity: 0.35 }}>
               <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#f59e0b' }}>Pro</div>
               <div className="flex items-end gap-1 mb-2">
                 <span className="text-4xl font-black text-white">₹499</span>
@@ -128,7 +130,9 @@ export default function PricingPage() {
                 {PAID.map((f, i) => (
                   <li key={i} className="flex items-center justify-between gap-2">
                     <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{f.label}</span>
-                    <Cell value={f.value} />
+                    <span className="flex-shrink-0 flex justify-end" style={{ minWidth: '5rem' }}>
+                      <Cell value={f.value} />
+                    </span>
                   </li>
                 ))}
               </ul>
