@@ -15,6 +15,22 @@ import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 
+/**
+ * Normalise Sarvam speaker IDs to zero-padded SPEAKER_XX format so they match
+ * the speaker_labels keys stored by /api/extension/session.
+ * Handles: "SPEAKER_0" → "SPEAKER_00", "0" → "SPEAKER_00", 0 → "SPEAKER_00"
+ */
+function normalizeSpeaker(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s || s === 'null' || s === 'undefined') return null;
+  const numOnly = s.match(/^(\d+)$/);
+  if (numOnly) return `SPEAKER_${String(parseInt(numOnly[1], 10)).padStart(2, '0')}`;
+  const speakerMatch = s.match(/^SPEAKER_?(\d+)$/i);
+  if (speakerMatch) return `SPEAKER_${String(parseInt(speakerMatch[1], 10)).padStart(2, '0')}`;
+  return s;
+}
+
 export interface ChunkInput {
   meetingId: string;
   audioBuffer: Buffer;
@@ -86,9 +102,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
               typeof startRaw === 'number' && Number.isFinite(startRaw)
                 ? startRaw > 3600 ? Math.round(startRaw / 1000) : Math.round(startRaw)
                 : 0;
-            const speaker =
-              e.speaker ??
-              (raw['speaker_id'] != null ? `SPEAKER_${raw['speaker_id']}` : null);
+            const speaker = normalizeSpeaker(e.speaker ?? raw['speaker_id']);
             return {
               text: e.transcript,
               startSeconds: startSec,

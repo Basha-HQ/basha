@@ -49,6 +49,7 @@ async function transcribeAudioSync(
   formData.append('file', blob, fileName);
   formData.append('model', 'saaras:v3');
   formData.append('mode', sttMode);
+  formData.append('with_diarization', 'true');
 
   const response = await fetch(`${SARVAM_BASE_URL}/speech-to-text`, {
     method: 'POST',
