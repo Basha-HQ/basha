@@ -13,8 +13,17 @@ let recordingStartTime = null;
 let audioContext = null;
 let uploadCredentials = null; // { token, origin }
 
-// Minimum blob size (in bytes) to consider a recording valid.
-// A near-empty WebM (just headers) is typically ~3-5 KB.
+// Chunked upload state
+let chunkIndex = 0;          // monotonically increasing index sent with each chunk
+let chunkStartSeconds = 0;   // timestamp offset for the current chunk window
+let flushInterval = null;     // setInterval handle for periodic flushing
+let isFlushingChunk = false;  // prevents overlapping flushes
+
+// Each 30-second chunk of WebM/Opus is ~300 KB — well under Vercel's 4.5 MB body limit.
+// This enables unlimited meeting length: we upload and transcribe incrementally.
+const CHUNK_FLUSH_INTERVAL_MS = 30_000;
+
+// Minimum blob size (in bytes) to consider audio meaningful (not just WebM headers).
 const MIN_VALID_BLOB_SIZE = 10_000; // 10 KB
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -31,6 +40,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
+/**
+ * Upload a single audio chunk to /api/extension/chunk.
+ * @param {Blob} blob        — the audio data for this chunk
+ * @param {number} idx       — chunk sequence number (0-based)
+ * @param {number} startSec  — seconds elapsed since recording start (timestamp offset)
+ * @param {boolean} isFinal  — true on the last chunk to trigger summary + completion
+ * @param {{ token: string, origin: string }} creds
+ * @param {string} meetingId
+ * @param {number|null} duration — total meeting duration (seconds), only on final chunk
+ */
+async function uploadChunk(blob, idx, startSec, isFinal, creds, meetingId, duration) {
+  const formData = new FormData();
+  formData.append('audio', blob, `${meetingId}_chunk${idx}.webm`);
+  formData.append('meetingId', meetingId);
+  formData.append('chunkIndex', String(idx));
+  formData.append('chunkStartSeconds', String(startSec));
+  formData.append('isFinal', String(isFinal));
+  if (isFinal && duration != null) formData.append('duration', String(duration));
+
+  return fetch(`${creds.origin}/api/extension/chunk`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${creds.token}` },
+    body: formData,
+  });
+}
+
 async function handleStartRecording({ streamId, meetingId, token, origin }) {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     return;
@@ -39,6 +74,8 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   activeMeetingId = meetingId;
   uploadCredentials = { token, origin };
   chunks = [];
+  chunkIndex = 0;
+  chunkStartSeconds = 0;
   recordingStartTime = Date.now();
 
   // 1. Capture tab audio (other participants' voices, meeting sounds)
@@ -108,10 +145,17 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   const allStreams = [tabStream, micStream].filter(Boolean);
 
   mediaRecorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: mimeType });
-    const duration = Math.round((Date.now() - recordingStartTime) / 1000);
+    // Clear flush interval before processing final chunk
+    clearInterval(flushInterval);
+    flushInterval = null;
+    isFlushingChunk = false;
+
+    const remainingBlob = new Blob(chunks, { type: mimeType });
+    const totalDuration = Math.round((Date.now() - recordingStartTime) / 1000);
     const capturedMeetingId = activeMeetingId;
     const creds = uploadCredentials;
+    const capturedChunkIndex = chunkIndex;
+    const capturedChunkStartSeconds = chunkStartSeconds;
 
     // Stop all tracks to release microphone/tab audio
     allStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
@@ -123,40 +167,40 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     chunks = [];
     activeMeetingId = null;
     uploadCredentials = null;
+    chunkIndex = 0;
+    chunkStartSeconds = 0;
 
-    // Check for empty/too-short recordings
-    if (blob.size < MIN_VALID_BLOB_SIZE) {
+    // If no prior chunks flushed AND the recording is empty, abort
+    if (capturedChunkIndex === 0 && remainingBlob.size < MIN_VALID_BLOB_SIZE) {
       chrome.runtime.sendMessage({
         type: 'UPLOAD_FAILED',
         meetingId: capturedMeetingId,
-        error: `Recording is empty (${Math.round(blob.size / 1024)} KB). No audio was captured — check that meeting audio is playing and microphone permission is granted.`,
+        error: `Recording is empty (${Math.round(remainingBlob.size / 1024)} KB). No audio was captured — check that meeting audio is playing and microphone permission is granted.`,
       });
       return;
     }
 
-    // Upload directly from offscreen (avoids Chrome message size limits)
+    // Upload remaining audio as the final chunk (triggers summary + completion on server)
     try {
-      const formData = new FormData();
-      formData.append('audio', blob, `${capturedMeetingId}.webm`);
-      formData.append('meetingId', capturedMeetingId);
-      if (duration) formData.append('duration', String(duration));
-
-      const res = await fetch(`${creds.origin}/api/extension/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${creds.token}` },
-        body: formData,
-      });
+      const res = await uploadChunk(
+        remainingBlob,
+        capturedChunkIndex,
+        capturedChunkStartSeconds,
+        true, // isFinal
+        creds,
+        capturedMeetingId,
+        totalDuration
+      );
 
       if (!res.ok) {
         const text = await res.text().catch(() => res.status.toString());
-        throw new Error(`Upload failed (${res.status}): ${text}`);
+        throw new Error(`Final chunk upload failed (${res.status}): ${text}`);
       }
 
-      const data = await res.json();
       chrome.runtime.sendMessage({
         type: 'UPLOAD_COMPLETE',
         meetingId: capturedMeetingId,
-        processingUrl: data.processingUrl,
+        processingUrl: `/meetings/${capturedMeetingId}`,
       });
     } catch (err) {
       chrome.runtime.sendMessage({
@@ -167,8 +211,44 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     }
   };
 
-  // Collect data every 1 second for more granular chunks
+  // Collect data every 1 second for fine-grained chunk assembly
   mediaRecorder.start(1000);
+
+  // Flush a chunk every 30 seconds during recording.
+  // Each flush uploads ~300 KB of WebM/Opus and immediately starts transcription,
+  // enabling unlimited meeting length without hitting Vercel's body size limit.
+  flushInterval = setInterval(async () => {
+    if (!chunks.length || !activeMeetingId || isFlushingChunk) return;
+    isFlushingChunk = true;
+
+    // Drain the current chunk buffer
+    const pendingData = chunks.splice(0);
+    const blob = new Blob(pendingData, { type: mimeType });
+
+    if (blob.size < MIN_VALID_BLOB_SIZE) {
+      // Near-silence — skip upload but keep accumulating
+      isFlushingChunk = false;
+      return;
+    }
+
+    const idx = chunkIndex++;
+    const startSec = chunkStartSeconds;
+    chunkStartSeconds = Math.round((Date.now() - recordingStartTime) / 1000);
+
+    try {
+      const res = await uploadChunk(blob, idx, startSec, false, uploadCredentials, activeMeetingId, null);
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.status.toString());
+        console.error(`[offscreen] Chunk ${idx} upload failed (${res.status}): ${text}`);
+      } else {
+        console.log(`[offscreen] Chunk ${idx} uploaded (${Math.round(blob.size / 1024)} KB, start=${startSec}s)`);
+      }
+    } catch (err) {
+      console.error(`[offscreen] Chunk ${idx} upload error:`, err.message);
+    } finally {
+      isFlushingChunk = false;
+    }
+  }, CHUNK_FLUSH_INTERVAL_MS);
 }
 
 function handleStopRecording() {
