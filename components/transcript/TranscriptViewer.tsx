@@ -475,9 +475,15 @@ function TranscriptRow({
             )}
           </div>
         )}
-        {/* No speaker: show timestamp inline */}
+        {/* No speaker: show avatar placeholder + timestamp inline */}
         {!segment.speaker && (
-          <div>
+          <div className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              ?
+            </div>
             {onSeek ? (
               <button
                 onClick={onSeek}
@@ -517,6 +523,20 @@ function TranscriptRow({
                 {formatTimestamp(displayTimestamp)}
               </span>
             </div>
+          </div>
+        )}
+        {/* No speaker: mirror the placeholder row so text aligns with left column */}
+        {!segment.speaker && (
+          <div className="flex items-center gap-2">
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
+              style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              ?
+            </div>
+            <span className="text-xs font-mono tabular-nums" style={{ color: '#f59e0b' }}>
+              {formatTimestamp(displayTimestamp)}
+            </span>
           </div>
         )}
         {/* English text */}
