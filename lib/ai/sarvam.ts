@@ -332,17 +332,20 @@ export async function translateToEnglish(
     return text;
   }
 
-  // Build request body — omit source_language_code when it's 'auto' to let
-  // Sarvam attempt auto-detection. If neither works, we fall back below.
+  // Sarvam's translate API requires source_language_code — auto-detection via
+  // omission is not supported. If we don't have a language code, return as-is.
+  if (sourceLang === 'auto') {
+    console.warn(`[sarvam] Translation skipped (language unknown): returning original text`);
+    return text;
+  }
+
   const requestBody: Record<string, string> = {
     input: text,
+    source_language_code: sourceLang,
     target_language_code: 'en-IN',
     model: 'mayura:v1',
     mode: 'formal',
   };
-  if (sourceLang !== 'auto') {
-    requestBody['source_language_code'] = sourceLang;
-  }
 
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',

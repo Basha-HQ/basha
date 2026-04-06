@@ -68,7 +68,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     const detectedLang =
       (sourceLanguage && sourceLanguage !== 'auto')
         ? sourceLanguage
-        : (sttResult.language_code && sttResult.language_code !== 'unknown' && sttMode !== 'translit'
+        : (sttResult.language_code && sttResult.language_code !== 'unknown'
             ? sttResult.language_code
             : 'auto');
 
@@ -190,19 +190,21 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
   if (audioBuffer.byteLength >= MIN_AUDIO_BYTES) {
     const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode);
 
-    console.log(
-      `[pipeline:chunk] ${fileName} — transcript length: ${sttResult.transcript?.length}`,
-      `| language: ${sttResult.language_code}`,
-      `| diarized: ${sttResult.diarized_entries?.length ?? 0}`,
-      `| chunkStart: ${chunkStartSeconds}s`
-    );
-
     const detectedLang =
       sourceLanguage && sourceLanguage !== 'auto'
         ? sourceLanguage
-        : sttResult.language_code && sttResult.language_code !== 'unknown' && sttMode !== 'translit'
+        : sttResult.language_code && sttResult.language_code !== 'unknown'
           ? sttResult.language_code
           : 'auto';
+
+    console.log(
+      `[pipeline:chunk] ${fileName} — transcript length: ${sttResult.transcript?.length}`,
+      `| sttMode: ${sttMode}`,
+      `| stt language_code: ${sttResult.language_code}`,
+      `| detectedLang: ${detectedLang}`,
+      `| diarized: ${sttResult.diarized_entries?.length ?? 0}`,
+      `| chunkStart: ${chunkStartSeconds}s`
+    );
 
     // Build segments, offsetting timestamps by chunkStartSeconds
     const rawSegments: Array<{ text: string; startSeconds: number; speaker: string | null }> =
