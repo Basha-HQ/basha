@@ -49,7 +49,8 @@ async function transcribeAudioSync(
   formData.append('file', blob, fileName);
   formData.append('model', 'saaras:v3');
   formData.append('mode', sttMode);
-  formData.append('with_diarization', 'true');
+  // NOTE: Sarvam's real-time (sync) API does NOT support with_diarization.
+  // Diarization is only available via the batch API (transcribeAudioBatch).
 
   const response = await fetch(`${SARVAM_BASE_URL}/speech-to-text`, {
     method: 'POST',
