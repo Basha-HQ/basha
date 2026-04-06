@@ -11,6 +11,7 @@ interface Meeting {
   created_at: string;
   duration: number | null;
   source_language: string | null;
+  summary: string | null;
 }
 
 interface Props {
