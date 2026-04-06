@@ -92,3 +92,40 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ meetingId });
 }
+
+/**
+ * PATCH /api/extension/session
+ * Updates speaker_labels on an active meeting from the extension.
+ * Called after a delayed re-scrape of participant names from the meeting DOM.
+ */
+export async function PATCH(req: NextRequest) {
+  const userId = await getExtensionUser(req.headers.get('authorization'));
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const { meetingId, participantNames } = body as {
+    meetingId?: string;
+    participantNames?: string[];
+  };
+
+  if (!meetingId || !Array.isArray(participantNames) || participantNames.length === 0) {
+    return NextResponse.json({ error: 'meetingId and participantNames required' }, { status: 400 });
+  }
+
+  const speakerLabels = Object.fromEntries(
+    participantNames
+      .slice(0, 10)
+      .map((name, i) => [`SPEAKER_${String(i).padStart(2, '0')}`, name])
+  );
+
+  await query(
+    `UPDATE meetings
+     SET speaker_labels = $1
+     WHERE id = $2 AND user_id = $3`,
+    [JSON.stringify(speakerLabels), meetingId, userId]
+  );
+
+  return NextResponse.json({ ok: true });
+}

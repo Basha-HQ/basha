@@ -115,6 +115,24 @@ async function apiPost(path, body) {
   return res.json();
 }
 
+async function apiPatch(path, body) {
+  const [token, origin] = await Promise.all([getToken(), getAppOrigin()]);
+  if (!token) throw new Error('No extension token');
+  const res = await fetch(`${origin}${path}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.status.toString());
+    throw new Error(`API PATCH ${path} failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
 async function apiGet(path) {
   const [token, origin] = await Promise.all([getToken(), getAppOrigin()]);
   if (!token) throw new Error('No extension token');
@@ -203,6 +221,13 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
     status: 'recording',
   });
 
+  // Schedule a delayed re-scrape of participant names in case the initial scrape
+  // ran before Google Meet rendered participant tiles (document_idle fires before
+  // React/Meet JS finishes building the participant list).
+  // Store tabId alongside meetingId so the alarm handler knows which tab to scrape.
+  await chrome.storage.session.set({ rescrapeTarget: { meetingId, tabId } });
+  chrome.alarms.create('basha-rescrape-speakers', { delayInMinutes: 10 / 60 }); // ~10 seconds
+
   notifyPopup({ isRecording: true, meetingId, startedAt: Date.now(), status: 'recording' });
   return { success: true, meetingId };
 }
@@ -250,6 +275,33 @@ async function handleUploadFailed({ meetingId: _meetingId, error }) {
 // ---------------------------------------------------------------------------
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  // Re-scrape participant names ~10s after recording starts (Meet renders DOM asynchronously)
+  if (alarm.name === 'basha-rescrape-speakers') {
+    const { rescrapeTarget } = await chrome.storage.session.get('rescrapeTarget');
+    await chrome.storage.session.remove('rescrapeTarget');
+    if (!rescrapeTarget?.meetingId || !rescrapeTarget?.tabId) return;
+
+    let participants = [];
+    try {
+      const result = await chrome.tabs.sendMessage(rescrapeTarget.tabId, { type: 'BASHA_GET_PARTICIPANTS' });
+      participants = result?.participants ?? [];
+    } catch {
+      // Tab may have closed — non-fatal
+    }
+
+    if (participants.length > 0) {
+      try {
+        await apiPatch('/api/extension/session', {
+          meetingId: rescrapeTarget.meetingId,
+          participantNames: participants,
+        });
+      } catch {
+        // Non-fatal — transcript still processes without speaker names
+      }
+    }
+    return;
+  }
+
   if (alarm.name !== ALARM_STATUS_POLL) return;
 
   const { meetingId } = await getState();
