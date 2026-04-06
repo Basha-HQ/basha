@@ -61,8 +61,8 @@ export async function handleRecordingReady(
         'SELECT source_language FROM meetings WHERE id = $1',
         [bot.meeting_id]
       ),
-      queryOne<{ output_script: string }>(
-        'SELECT output_script FROM users WHERE id = $1',
+      queryOne<{ output_script: string; speaking_language: string }>(
+        'SELECT output_script, speaking_language FROM users WHERE id = $1',
         [userId]
       ),
     ]);
@@ -74,6 +74,7 @@ export async function handleRecordingReady(
       fileName: `${bot.meeting_id}.${ext}`,
       sourceLanguage: meeting?.source_language ?? 'auto',
       outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
+      speakingLanguage: userPrefs?.speaking_language ?? undefined,
     });
 
     await query(

@@ -292,7 +292,7 @@ export async function transcribeAudio(
  */
 export async function translateToEnglish(
   text: string,
-  sourceLanguage: string = 'auto'
+  sourceLanguage: string | null = null
 ): Promise<string> {
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
@@ -314,22 +314,23 @@ export async function translateToEnglish(
     unknown: 'auto',
   };
 
-  const sourceLang = languageMap[sourceLanguage] ?? sourceLanguage;
+  const sourceLang = sourceLanguage ? (languageMap[sourceLanguage] ?? sourceLanguage) : null;
 
-  // Sarvam's translate API requires source_language_code — auto-detection via
-  // omission is not supported. If we don't have a language code, return as-is.
-  if (sourceLang === 'auto') {
-    console.warn(`[sarvam] Translation skipped (language unknown): returning original text`);
-    return text;
-  }
-
+  // Build request — omit source_language_code when language is unknown/auto.
+  // Sarvam translate can auto-detect when the field is omitted, which is the right
+  // behaviour for translit-mode Tanglish (Sarvam STT lies and returns 'en-IN'
+  // for Roman-script Tamil; omitting the field lets the translate API detect it correctly).
   const requestBody: Record<string, string> = {
     input: text,
-    source_language_code: sourceLang,
     target_language_code: 'en-IN',
     model: 'mayura:v1',
     mode: 'formal',
   };
+  if (sourceLang && sourceLang !== 'auto') {
+    requestBody.source_language_code = sourceLang;
+  } else {
+    console.log(`[sarvam] Omitting source_language_code — letting Sarvam auto-detect (input: "${text.slice(0, 60)}")`);
+  }
 
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',

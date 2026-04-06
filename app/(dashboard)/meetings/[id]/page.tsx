@@ -245,6 +245,13 @@ export default async function MeetingDetailPage({
               knownDuration={meeting.duration ?? undefined}
               flaggedSegmentIds={flaggedSegmentIds}
               speakerLabels={meeting.speaker_labels ?? undefined}
+              suggestedParticipantNames={
+                meeting.speaker_labels
+                  ? Object.values(meeting.speaker_labels).filter(
+                      (v) => v && !v.startsWith('SPEAKER_')
+                    )
+                  : undefined
+              }
               sourceLanguage={meeting.source_language ?? undefined}
             />
           </div>

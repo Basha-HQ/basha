@@ -24,6 +24,12 @@ interface Props {
   flaggedSegmentIds?: string[];
   /** User-provided speaker display names — keys are raw IDs like "SPEAKER_00" */
   speakerLabels?: Record<string, string>;
+  /**
+   * Names scraped from the meeting DOM (e.g. Google Meet participant tiles).
+   * Shown as suggestions in the speaker-rename banner so the user can confirm
+   * with one click rather than typing from scratch.
+   */
+  suggestedParticipantNames?: string[];
   /** When true: hides flag button and disables speaker renaming (used on public share page) */
   readOnly?: boolean;
   /** Detected source language code e.g. "ta-IN" — shown as badge on ORIGINAL column */
@@ -65,13 +71,14 @@ function speakerInitial(speaker: string, labels?: Record<string, string>): strin
   return label.charAt(0).toUpperCase();
 }
 
-export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath, knownDuration, flaggedSegmentIds, speakerLabels: initialSpeakerLabels, readOnly, sourceLanguage }: Props) {
+export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPath, knownDuration, flaggedSegmentIds, speakerLabels: initialSpeakerLabels, suggestedParticipantNames, readOnly, sourceLanguage }: Props) {
   const [search, setSearch] = useState('');
   const [flagTarget, setFlagTarget] = useState<TranscriptRow | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1);
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>(initialSpeakerLabels ?? {});
   const [audioDuration, setAudioDuration] = useState(knownDuration ?? 0);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const segmentRefs = useRef<Array<HTMLDivElement | null>>([]);
   const seekAudioRef = useRef<((s: number) => void) | null>(null);
@@ -230,6 +237,55 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
             knownDuration={knownDuration}
           />
         )}
+
+        {/* Speaker name suggestion banner — shown when speakers are unidentified */}
+        {!readOnly && !bannerDismissed && (() => {
+          // Find unique speaker IDs in the transcript
+          const uniqueSpeakers = [...new Set(transcripts.map((t) => t.speaker).filter(Boolean))] as string[];
+          // Show banner if any speaker is still using a generic label (no real name assigned)
+          const hasUnnamed = uniqueSpeakers.some((s) => !speakerLabels[s] || speakerLabels[s] === s);
+          if (!hasUnnamed || uniqueSpeakers.length === 0) return null;
+
+          // Suggestions: use DOM-scraped names if available, else empty slots
+          const suggestions = uniqueSpeakers.map((speakerId, i) => ({
+            speakerId,
+            currentName: speakerLabels[speakerId] && speakerLabels[speakerId] !== speakerId
+              ? speakerLabels[speakerId]
+              : '',
+            suggestedName: suggestedParticipantNames?.[i] ?? '',
+          }));
+
+          return (
+            <div
+              className="mx-4 my-3 rounded-xl px-4 py-3 flex flex-col gap-3"
+              style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  Who are the speakers? Add names to personalise the transcript.
+                </p>
+                <button
+                  onClick={() => setBannerDismissed(true)}
+                  className="text-xs shrink-0 transition-colors"
+                  style={{ color: 'rgba(255,255,255,0.25)' }}
+                >
+                  Dismiss
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map(({ speakerId, currentName, suggestedName }) => (
+                  <SpeakerNameInput
+                    key={speakerId}
+                    speakerId={speakerId}
+                    currentName={currentName}
+                    suggestedName={suggestedName}
+                    onConfirm={(name) => handleRenameSpeaker(speakerId, name)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Column headers */}
         <div
@@ -548,6 +604,89 @@ function TranscriptRow({
           <p className="text-sm italic" style={{ color: 'rgba(255,255,255,0.2)' }}>—</p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SpeakerNameInput — inline chip for confirming/typing a speaker name
+// ---------------------------------------------------------------------------
+
+function SpeakerNameInput({
+  speakerId,
+  currentName,
+  suggestedName,
+  onConfirm,
+}: {
+  speakerId: string;
+  currentName: string;
+  suggestedName: string;
+  onConfirm: (name: string) => void;
+}) {
+  const displayId = speakerId.match(/(\d+)$/)
+    ? `Speaker ${parseInt(speakerId.match(/(\d+)$/)![1], 10) + 1}`
+    : speakerId;
+
+  const [value, setValue] = useState(currentName || suggestedName);
+  const [saved, setSaved] = useState(!!currentName);
+
+  function handleConfirm() {
+    if (!value.trim()) return;
+    onConfirm(value.trim());
+    setSaved(true);
+  }
+
+  if (saved) {
+    return (
+      <div
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs"
+        style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399' }}
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span className="font-semibold">{displayId}</span>
+        <span style={{ color: 'rgba(255,255,255,0.5)' }}>= {value}</span>
+        <button
+          onClick={() => setSaved(false)}
+          className="ml-1 transition-opacity"
+          style={{ color: 'rgba(255,255,255,0.25)', fontSize: '10px' }}
+          title="Edit"
+        >
+          edit
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-xl overflow-hidden"
+      style={{ border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.06)' }}
+    >
+      <span
+        className="px-2 py-1.5 text-xs font-semibold shrink-0"
+        style={{ color: 'rgba(255,255,255,0.45)', borderRight: '1px solid rgba(99,102,241,0.2)' }}
+      >
+        {displayId}
+      </span>
+      <input
+        className="bg-transparent text-xs outline-none px-2 py-1.5 w-28"
+        style={{ color: 'rgba(255,255,255,0.85)' }}
+        placeholder={suggestedName || 'Enter name…'}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
+      />
+      {value.trim() && (
+        <button
+          onClick={handleConfirm}
+          className="px-2 py-1.5 text-xs font-semibold shrink-0 transition-colors"
+          style={{ color: '#6366f1' }}
+        >
+          Save
+        </button>
+      )}
     </div>
   );
 }

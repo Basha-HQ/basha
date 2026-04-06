@@ -48,10 +48,11 @@ export interface ProcessingInput {
   fileName: string;        // e.g. "uuid.webm" — determines MIME type for Sarvam
   sourceLanguage: string;  // e.g. "ta-IN" or "auto"
   outputScript?: 'roman' | 'fully-native' | 'spoken-form-in-native';  // default: 'roman'
+  speakingLanguage?: string; // user's profile speaking language (e.g. 'ta') — used in translit mode
 }
 
 export async function processAudioForMeeting(input: ProcessingInput): Promise<void> {
-  const { meetingId, audioBuffer, fileName, sourceLanguage, outputScript = 'roman' } = input;
+  const { meetingId, audioBuffer, fileName, sourceLanguage, outputScript = 'roman', speakingLanguage } = input;
 
   await query(
     `UPDATE meetings SET status = 'processing' WHERE id = $1`,
@@ -77,16 +78,19 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     }
 
     // Resolve language for translation.
-    // User-set source_language takes priority — Sarvam STT often returns 'en-IN'
-    // for code-mixed speech (e.g. Tanglish) which would incorrectly skip translation.
-    // In 'translit' mode, language_code is always 'en-IN' regardless of actual speech
-    // language, so we must not use it as a fallback — keep 'auto' to force a translation attempt.
-    const detectedLang =
+    // Priority: explicit sourceLanguage > user's speaking_language profile > STT result.
+    // In 'translit' mode Sarvam always returns language_code='en-IN' regardless of actual
+    // speech — using it would cause source==target rejection from the translate API.
+    // Instead, use the user's speaking_language (e.g. 'ta') if set, or null to trigger
+    // Sarvam translate's own auto-detection (omit source_language_code from request).
+    const detectedLang: string | null =
       (sourceLanguage && sourceLanguage !== 'auto')
         ? sourceLanguage
-        : (sttResult.language_code && sttResult.language_code !== 'unknown'
-            ? sttResult.language_code
-            : 'auto');
+        : sttMode === 'translit'
+          ? (speakingLanguage && speakingLanguage !== 'auto' ? speakingLanguage : null)
+          : (sttResult.language_code && sttResult.language_code !== 'unknown'
+              ? sttResult.language_code
+              : null);
 
     // 2. Build segments — prefer diarized (real timestamps + speaker) over sentence split
     const segments: Array<{ text: string; startSeconds: number; speaker: string | null }> =

@@ -25,6 +25,11 @@ const EXCLUDE_NAMES = new Set([
   'message', 'spotlight', 'tile', 'participant', 'host',
 ]);
 
+// Accumulated set of participant names seen since page load.
+// Updated by scrapeAndAccumulate() on every DOM mutation and explicit requests.
+// Using a Set ensures no duplicates even across multiple scrapes.
+const seenParticipants = new Set();
+
 function scrapeParticipants() {
   const names = new Set();
 
@@ -72,6 +77,36 @@ function scrapeParticipants() {
 
   return [...names];
 }
+
+/**
+ * Scrape the DOM and add any new names to seenParticipants.
+ * Called on every DOM mutation and on explicit BASHA_GET_PARTICIPANTS requests.
+ */
+function scrapeAndAccumulate() {
+  for (const name of scrapeParticipants()) {
+    seenParticipants.add(name);
+  }
+}
+
+// Throttle MutationObserver callbacks — Google Meet DOM changes constantly;
+// no need to scrape on every single mutation.
+let scrapeThrottleTimer = null;
+function scheduleScrape() {
+  if (scrapeThrottleTimer) return;
+  scrapeThrottleTimer = setTimeout(() => {
+    scrapeThrottleTimer = null;
+    scrapeAndAccumulate();
+  }, 2000); // debounce: 2 seconds after last mutation
+}
+
+// Watch the whole document for new participant tiles appearing.
+// This catches: late joiners, tiles that render after our initial scrape,
+// and names that appear in the participant panel when opened.
+const participantObserver = new MutationObserver(scheduleScrape);
+participantObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+// Initial scrape on page load
+scrapeAndAccumulate();
 
 // ---------------------------------------------------------------------------
 // Recording indicator pill
@@ -356,7 +391,9 @@ function setupMeetingDetection() {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'BASHA_GET_PARTICIPANTS') {
-    sendResponse({ participants: scrapeParticipants() });
+    // Do a fresh scrape before responding to catch any names not yet in seenParticipants
+    scrapeAndAccumulate();
+    sendResponse({ participants: [...seenParticipants] });
   }
   if (message.type === 'RECORDING_STARTED_FROM_PROMPT') {
     removeRecordingPrompt();
