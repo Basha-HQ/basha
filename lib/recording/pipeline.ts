@@ -144,14 +144,19 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     const fullEnglish = englishSegments.join(' ');
     const summary = await generateSummary(fullEnglish, meeting?.title);
     const aiTitle = await generateMeetingTitle(summary);
+    // Fallback: extract first 7 words of overview when AI title generation fails
+    const effectiveTitle = aiTitle ||
+      (summary.overview
+        ? summary.overview.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 7).join(' ')
+        : null);
 
     // 6. Mark completed — also persist the detected language so meeting cards can show it
     await query(
       `UPDATE meetings
-       SET status = 'completed', summary = $1, source_language = $3, completed_at = NOW()${aiTitle ? ', title = $4' : ''}
+       SET status = 'completed', summary = $1, source_language = $3, completed_at = NOW()${effectiveTitle ? ', title = $4' : ''}
        WHERE id = $2`,
-      aiTitle
-        ? [JSON.stringify(summary), meetingId, detectedLang, aiTitle]
+      effectiveTitle
+        ? [JSON.stringify(summary), meetingId, detectedLang, effectiveTitle]
         : [JSON.stringify(summary), meetingId, detectedLang]
     );
 
@@ -167,7 +172,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       sendTranscriptReadyEmail(
         userRow.email,
         userRow.name,
-        aiTitle ?? 'Your Meeting',
+        effectiveTitle ?? 'Your Meeting',
         summary,
         `${appUrl}/meetings/${meetingId}`
       ).catch(console.error); // fire-and-forget — never block the pipeline
@@ -230,8 +235,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
               typeof startRaw === 'number' && Number.isFinite(startRaw)
                 ? startRaw > 3600 ? Math.round(startRaw / 1000) : Math.round(startRaw)
                 : 0;
-            const speaker =
-              e.speaker ?? (raw['speaker_id'] != null ? `SPEAKER_${raw['speaker_id']}` : null);
+            const speaker = normalizeSpeaker(e.speaker ?? raw['speaker_id']);
             return { text: e.transcript, startSeconds: chunkStartSeconds + localSec, speaker };
           })
         : splitIntoSegments(sttResult.transcript, 30).map((s) => ({
@@ -294,11 +298,15 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
   const meeting = await queryOne<{ title: string }>('SELECT title FROM meetings WHERE id = $1', [meetingId]);
   const summary = await generateSummary(fullEnglish, meeting?.title);
   const aiTitle = await generateMeetingTitle(summary);
+  const effectiveTitle = aiTitle ||
+    (summary.overview
+      ? summary.overview.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 7).join(' ')
+      : null);
 
-  if (aiTitle) {
+  if (effectiveTitle) {
     await query(
       `UPDATE meetings SET status = 'completed', summary = $1, title = $2, completed_at = NOW() WHERE id = $3`,
-      [JSON.stringify(summary), aiTitle, meetingId]
+      [JSON.stringify(summary), effectiveTitle, meetingId]
     );
   } else {
     await query(

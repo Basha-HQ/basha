@@ -251,20 +251,7 @@ async function transcribeAudioBatch(
     ? rawDiarized
     : (rawDiarized as { entries?: DiarizedEntry[] } | undefined)?.entries ?? [];
 
-  // If no diarized entries but results[] has per-chunk start/end, synthesise entries
-  const finalEntries: DiarizedEntry[] =
-    diarized_entries.length > 0
-      ? diarized_entries
-      : (result.results ?? [])
-          .filter((r) => typeof r.start === 'number' && typeof r.end === 'number')
-          .map((r) => ({
-            speaker: 'SPEAKER_00',
-            transcript: r.transcript,
-            start: r.start!,
-            end: r.end!,
-          }));
-
-  return { transcript, language_code, diarized_entries: finalEntries };
+  return { transcript, language_code, diarized_entries };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -328,11 +315,6 @@ export async function translateToEnglish(
   };
 
   const sourceLang = languageMap[sourceLanguage] ?? sourceLanguage;
-
-  // Skip translation if source is already English
-  if (sourceLang === 'en-IN' || sourceLang === 'en') {
-    return text;
-  }
 
   // Sarvam's translate API requires source_language_code — auto-detection via
   // omission is not supported. If we don't have a language code, return as-is.

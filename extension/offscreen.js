@@ -3,7 +3,18 @@
  *
  * Captures BOTH tab audio (other participants) AND microphone (the user),
  * mixes them via Web Audio API, and records as a single WebM/Opus stream.
- * Uploads the recorded audio directly to the server (avoids Chrome message size limits).
+ *
+ * Audio model: "accumulate and process once"
+ *   - Raw WebM chunks are uploaded to /api/extension/upload-chunk as they are
+ *     recorded (every 30s) for server-side storage only — no per-chunk STT.
+ *   - On recording stop, the final chunk is sent with isFinal=true.
+ *   - The server reassembles the full audio and runs the AI pipeline once,
+ *     giving proper meeting-level diarization and no looping artefacts.
+ *
+ * Chunk layout:
+ *   chunk 0 — WebM EBML header + first cluster (init segment)
+ *   chunk 1+ — raw cluster data (no EBML header)
+ *   server concat(chunk0, chunk1, ..., chunkN) = valid WebM file
  */
 
 let mediaRecorder = null;
@@ -13,18 +24,14 @@ let recordingStartTime = null;
 let audioContext = null;
 let uploadCredentials = null; // { token, origin }
 
-// Chunked upload state
-let chunkIndex = 0;          // monotonically increasing index sent with each chunk
-let chunkStartSeconds = 0;   // timestamp offset for the current chunk window
+let chunkIndex = 0;          // monotonically increasing sequence number
 let flushInterval = null;     // setInterval handle for periodic flushing
 let isFlushingChunk = false;  // prevents overlapping flushes
-let initSegment = null;       // WebM init segment (first flush) — prepended to all subsequent chunks so each is a valid standalone file
 
 // Each 30-second chunk of WebM/Opus is ~300 KB — well under Vercel's 4.5 MB body limit.
-// This enables unlimited meeting length: we upload and transcribe incrementally.
 const CHUNK_FLUSH_INTERVAL_MS = 30_000;
 
-// Minimum blob size (in bytes) to consider audio meaningful (not just WebM headers).
+// Minimum blob size to consider audio meaningful (not just WebM framing overhead).
 const MIN_VALID_BLOB_SIZE = 10_000; // 10 KB
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -42,25 +49,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 /**
- * Upload a single audio chunk to /api/extension/chunk.
- * @param {Blob} blob        — the audio data for this chunk
- * @param {number} idx       — chunk sequence number (0-based)
- * @param {number} startSec  — seconds elapsed since recording start (timestamp offset)
- * @param {boolean} isFinal  — true on the last chunk to trigger summary + completion
- * @param {{ token: string, origin: string }} creds
- * @param {string} meetingId
- * @param {number|null} duration — total meeting duration (seconds), only on final chunk
+ * Upload one raw WebM chunk to /api/extension/upload-chunk.
+ * chunk 0 contains the EBML header; subsequent chunks are raw cluster data.
+ * The server stores all chunks and reassembles on isFinal=true.
  */
-async function uploadChunk(blob, idx, startSec, isFinal, creds, meetingId, duration) {
+async function uploadChunk(blob, idx, isFinal, creds, meetingId, duration) {
   const formData = new FormData();
   formData.append('audio', blob, `${meetingId}_chunk${idx}.webm`);
   formData.append('meetingId', meetingId);
   formData.append('chunkIndex', String(idx));
-  formData.append('chunkStartSeconds', String(startSec));
   formData.append('isFinal', String(isFinal));
   if (isFinal && duration != null) formData.append('duration', String(duration));
 
-  return fetch(`${creds.origin}/api/extension/chunk`, {
+  return fetch(`${creds.origin}/api/extension/upload-chunk`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${creds.token}` },
     body: formData,
@@ -76,8 +77,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   uploadCredentials = { token, origin };
   chunks = [];
   chunkIndex = 0;
-  chunkStartSeconds = 0;
-  initSegment = null;
   recordingStartTime = Date.now();
 
   // 1. Capture tab audio (other participants' voices, meeting sounds)
@@ -115,7 +114,7 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     // Microphone access denied — record tab audio only
   }
 
-  // 3. Mix streams via Web Audio API (always use AudioContext for consistent output)
+  // 3. Mix streams via Web Audio API
   audioContext = new AudioContext();
   const destination = audioContext.createMediaStreamDestination();
 
@@ -147,7 +146,7 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   const allStreams = [tabStream, micStream].filter(Boolean);
 
   mediaRecorder.onstop = async () => {
-    // Clear flush interval before processing final chunk
+    // Stop periodic flush before processing the final chunk
     clearInterval(flushInterval);
     flushInterval = null;
     isFlushingChunk = false;
@@ -157,8 +156,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     const capturedMeetingId = activeMeetingId;
     const creds = uploadCredentials;
     const capturedChunkIndex = chunkIndex;
-    const capturedChunkStartSeconds = chunkStartSeconds;
-    const capturedInitSegment = initSegment;
 
     // Stop all tracks to release microphone/tab audio
     allStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
@@ -171,10 +168,8 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     activeMeetingId = null;
     uploadCredentials = null;
     chunkIndex = 0;
-    chunkStartSeconds = 0;
-    initSegment = null;
 
-    // If no prior chunks flushed AND the recording is empty, abort
+    // If no prior chunks were flushed AND the recording blob is empty, abort
     if (capturedChunkIndex === 0 && remainingBlob.size < MIN_VALID_BLOB_SIZE) {
       chrome.runtime.sendMessage({
         type: 'UPLOAD_FAILED',
@@ -184,17 +179,14 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
       return;
     }
 
-    // Upload remaining audio as the final chunk (triggers summary + completion on server)
-    // Prepend init segment so the final chunk is also a valid standalone WebM file
-    const finalBlob = capturedChunkIndex > 0 && capturedInitSegment
-      ? new Blob([capturedInitSegment, remainingBlob], { type: mimeType })
-      : remainingBlob;
-
+    // Upload remaining audio as the final chunk.
+    // If capturedChunkIndex === 0: remainingBlob is the complete recording (init + all data).
+    // If capturedChunkIndex > 0:  remainingBlob is raw cluster data only (init already sent as chunk 0).
+    // Either way, send as-is — the server will concatenate in order.
     try {
       const res = await uploadChunk(
-        finalBlob,
+        remainingBlob,
         capturedChunkIndex,
-        capturedChunkStartSeconds,
         true, // isFinal
         creds,
         capturedMeetingId,
@@ -223,14 +215,14 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   // Collect data every 1 second for fine-grained chunk assembly
   mediaRecorder.start(1000);
 
-  // Flush a chunk every 30 seconds during recording.
-  // Each flush uploads ~300 KB of WebM/Opus and immediately starts transcription,
-  // enabling unlimited meeting length without hitting Vercel's body size limit.
+  // Flush raw chunks every 30 seconds.
+  // chunk 0 is the WebM init segment (EBML header + first cluster).
+  // Subsequent chunks are raw cluster data — no init segment prepended.
+  // The server stores all chunks and concatenates them in order when isFinal=true.
   flushInterval = setInterval(async () => {
     if (!chunks.length || !activeMeetingId || isFlushingChunk) return;
     isFlushingChunk = true;
 
-    // Drain the current chunk buffer
     const pendingData = chunks.splice(0);
     const blob = new Blob(pendingData, { type: mimeType });
 
@@ -241,25 +233,14 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     }
 
     const idx = chunkIndex++;
-    const startSec = chunkStartSeconds;
-    chunkStartSeconds = Math.round((Date.now() - recordingStartTime) / 1000);
-
-    // First flush: save as init segment (contains WebM headers needed by all chunks)
-    // Subsequent flushes: prepend init segment so each chunk is a valid standalone WebM file
-    let uploadBlob = blob;
-    if (idx === 0) {
-      initSegment = blob;
-    } else if (initSegment) {
-      uploadBlob = new Blob([initSegment, blob], { type: mimeType });
-    }
 
     try {
-      const res = await uploadChunk(uploadBlob, idx, startSec, false, uploadCredentials, activeMeetingId, null);
+      const res = await uploadChunk(blob, idx, false, uploadCredentials, activeMeetingId, null);
       if (!res.ok) {
         const text = await res.text().catch(() => res.status.toString());
         console.error(`[offscreen] Chunk ${idx} upload failed (${res.status}): ${text}`);
       } else {
-        console.log(`[offscreen] Chunk ${idx} uploaded (${Math.round(blob.size / 1024)} KB, start=${startSec}s)`);
+        console.log(`[offscreen] Chunk ${idx} stored (${Math.round(blob.size / 1024)} KB)`);
       }
     } catch (err) {
       console.error(`[offscreen] Chunk ${idx} upload error:`, err.message);

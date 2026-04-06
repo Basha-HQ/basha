@@ -123,9 +123,10 @@ export default async function MeetingDetailPage({
               <span>{platformLabel(meeting.platform)}</span>
               <span style={{ color: 'rgba(255,255,255,0.15)' }}>·</span>
               <span>
-                {new Date(meeting.created_at).toLocaleDateString('en-IN', {
+                {new Date(meeting.created_at).toLocaleString('en-IN', {
                   day: 'numeric', month: 'long', year: 'numeric',
                   hour: '2-digit', minute: '2-digit',
+                  timeZone: 'Asia/Kolkata',
                 })}
               </span>
               {meeting.duration && (

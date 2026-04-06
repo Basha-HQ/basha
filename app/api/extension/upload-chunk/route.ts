@@ -1,18 +1,20 @@
 /**
  * POST /api/extension/upload-chunk
- * Receives one chunk of a large audio recording from the Chrome extension.
- * When the final chunk arrives, reassembles the full buffer, stores it in the
- * meetings table, and triggers the AI pipeline — same as /api/extension/upload.
+ * Receives one raw WebM chunk from the Chrome extension during recording.
+ * Chunks are stored in upload_chunks until the final chunk arrives,
+ * then the full audio is reassembled and the AI pipeline runs once.
  *
- * This route exists to work around Vercel's 4.5 MB serverless payload limit.
- * The extension splits recordings larger than 3 MB into 3 MB pieces.
+ * This is the "accumulate and process once" model:
+ *   - No per-chunk STT — proper diarization across the full meeting
+ *   - Each chunk is ≤30s (~300 KB) — stays under Vercel's 4.5 MB body limit
+ *   - Server reassembles chunks in order → single Sarvam batch job
  *
  * FormData fields:
- *   audio        — Blob slice for this chunk
+ *   audio        — raw WebM blob slice (chunk 0 includes EBML header)
  *   meetingId    — UUID of the meeting
- *   chunkIndex   — 0-based index of this chunk
- *   totalChunks  — total number of chunks in this upload
- *   duration     — (last chunk only) recording duration in seconds
+ *   chunkIndex   — 0-based sequence number
+ *   isFinal      — "true" on the last chunk to trigger assembly + pipeline
+ *   duration     — (last chunk only) total recording duration in seconds
  *
  * Auth: Extension Bearer token.
  */
@@ -36,13 +38,13 @@ export async function POST(req: NextRequest) {
 
     const meetingId = formData.get('meetingId') as string | null;
     const audioFile = formData.get('audio') as File | null;
-    const chunkIndex = Number(formData.get('chunkIndex'));
-    const totalChunks = Number(formData.get('totalChunks'));
+    const chunkIndex = Number(formData.get('chunkIndex') ?? 0);
+    const isFinal = formData.get('isFinal') === 'true';
     const durationRaw = formData.get('duration');
-    const duration = durationRaw ? Math.round(Number(durationRaw)) : null;
+    const duration = isFinal && durationRaw ? Math.round(Number(durationRaw)) : null;
 
-    if (!meetingId || !audioFile || isNaN(chunkIndex) || isNaN(totalChunks) || totalChunks < 1) {
-      return NextResponse.json({ error: 'meetingId, audio, chunkIndex, and totalChunks are required' }, { status: 400 });
+    if (!meetingId || !audioFile) {
+      return NextResponse.json({ error: 'meetingId and audio are required' }, { status: 400 });
     }
 
     // Verify meeting ownership
@@ -57,34 +59,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Meeting already processed' }, { status: 409 });
     }
 
-    // Store this chunk
+    // Store this raw chunk (total_chunks is now nullable — no longer used)
     const chunkBuffer = Buffer.from(await audioFile.arrayBuffer());
+
+    console.log(
+      `[extension/upload-chunk] meetingId=${meetingId} chunk=${chunkIndex}`,
+      `isFinal=${isFinal} size=${chunkBuffer.byteLength}B`
+    );
+
     await query(
       `INSERT INTO upload_chunks (meeting_id, chunk_index, total_chunks, data)
-       VALUES ($1, $2, $3, $4)
+       VALUES ($1, $2, NULL, $3)
        ON CONFLICT (meeting_id, chunk_index) DO UPDATE SET data = EXCLUDED.data`,
-      [meetingId, chunkIndex, totalChunks, chunkBuffer]
+      [meetingId, chunkIndex, chunkBuffer]
     );
 
-    // Check how many chunks we have now
-    const countRow = await queryOne<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM upload_chunks WHERE meeting_id = $1`,
-      [meetingId]
-    );
-    const received = parseInt(countRow?.count ?? '0', 10);
-
-    if (received < totalChunks) {
-      return NextResponse.json({ status: 'chunk_received', received, total: totalChunks });
+    if (!isFinal) {
+      return NextResponse.json({ status: 'chunk_received', chunkIndex });
     }
 
-    // ── All chunks received — reassemble ──────────────────────────────────────
+    // ── Final chunk received — reassemble full audio ──────────────────────────
     const chunkRows = await query<{ data: Buffer }>(
       `SELECT data FROM upload_chunks WHERE meeting_id = $1 ORDER BY chunk_index ASC`,
       [meetingId]
     );
+
+    if (chunkRows.length === 0) {
+      return NextResponse.json({ error: 'No chunks found for meeting' }, { status: 422 });
+    }
+
     const audioBuffer = Buffer.concat(chunkRows.map((r) => r.data));
 
-    // Clean up chunk rows immediately
+    // Clean up chunk rows immediately (frees DB space)
     await query(`DELETE FROM upload_chunks WHERE meeting_id = $1`, [meetingId]);
 
     // Fetch user output_script preference
@@ -95,12 +101,18 @@ export async function POST(req: NextRequest) {
 
     const fileName = `${meetingId}.webm`;
 
-    // Persist reassembled audio in the meetings row
+    // Persist reassembled audio for playback
     await query(
       `UPDATE meetings SET audio_data = $1, audio_path = $2, duration = $3 WHERE id = $4`,
       [audioBuffer, `/api/meetings/${meetingId}/audio`, duration, meetingId]
     );
 
+    console.log(
+      `[extension/upload-chunk] Reassembled ${chunkRows.length} chunks → ${audioBuffer.byteLength}B`,
+      `for meeting ${meetingId}. Triggering pipeline.`
+    );
+
+    // Run the full AI pipeline once on the complete audio
     after(
       processAudioForMeeting({
         meetingId,
