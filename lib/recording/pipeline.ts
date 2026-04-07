@@ -193,12 +193,14 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       const seg = segments[i];
       const originalText = seg.text;
       // english_text: translate to English for AI features + search
-      let en = await translateToEnglish(seg.text, detectedLang);
-      // If Sarvam bailed out (returned identical text) in translit mode, use LLM fallback.
-      // This handles Tanglish/Hinglish/Tenglish — any Indian language in Roman letters.
-      if (sttMode === 'translit' && en === seg.text) {
-        console.log('[pipeline] Sarvam skipped translation — using LLM fallback for segment', i);
+      // In translit mode Sarvam outputs Roman-script Indian language text (Tanglish, Hinglish,
+      // etc.). Sarvam's translate API is designed for native-script → English and does not work
+      // reliably for Roman-script input. Skip it and go straight to the LLM fallback.
+      let en: string;
+      if (sttMode === 'translit') {
         en = await translateWithLLM(seg.text);
+      } else {
+        en = await translateToEnglish(seg.text, detectedLang);
       }
       englishSegments.push(en);
 

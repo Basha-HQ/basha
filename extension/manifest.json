@@ -42,6 +42,16 @@
     {
       "matches": [
         "https://meet.google.com/*",
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*"
+      ],
+      "js": ["injected-rtc.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://meet.google.com/*",
         "https://*.zoom.us/j/*",
         "https://zoom.us/wc/*",
         "https://app.zoom.us/*",
