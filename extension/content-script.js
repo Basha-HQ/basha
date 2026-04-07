@@ -66,41 +66,61 @@ window.addEventListener('message', (event) => {
   );
   if (!loudest) return;
 
-  // Find which video element owns this audio track.
-  // Tries Google Meet selectors first, then Microsoft Teams selectors.
   let activeName = null;
-  for (const video of document.querySelectorAll('video')) {
-    if (!video.srcObject) continue;
-    const track = video.srcObject.getAudioTracks?.().find((t) => t.id === loudest.trackId);
-    if (!track) continue;
 
-    // ── Google Meet tile selectors ──────────────────────────────────────────
-    const meetTile =
-      video.closest('[data-participant-id]') ??
-      video.closest('[data-requested-participant-id]');
-
-    // ── Microsoft Teams tile selectors ──────────────────────────────────────
-    const teamsTile =
-      video.closest('[data-tid="roster-participant"]') ??
-      video.closest('[id^="video-tile-"]') ??
-      video.closest('[class*="video-tile"]');
-
-    const tile = meetTile ?? teamsTile;
-
-    // ── Google Meet: find the tile container then extract the name ─────────────
-    // Walk up from the video to find the ancestor that holds the name overlay.
-    // We stop at the first ancestor that contains .ZY8hPc.iPFm3e or .tTdl5d
-    // (both live inside the same per-participant tile container).
-    if (!activeName) {
+  // ── Local user (isLocal: true from injected-rtc.js outbound-rtp) ────────────
+  // The local user has no inbound video tile — use the scraped self-view name
+  // (the first name in seenParticipants that matches the self-view tile, or
+  // fall back to the first participant name we've ever seen).
+  if (loudest.isLocal) {
+    // Google Meet self-view tile: aria-label usually contains own name
+    // Try .ZY8hPc.iPFm3e on the self-view, or the first seenParticipants entry
+    for (const video of document.querySelectorAll('video')) {
+      if (!video.srcObject) continue;
+      // Self-view: outbound track is on the local stream (getVideoTracks present, no inbound audio)
+      const localTrack = video.srcObject.getVideoTracks?.()[0];
+      if (!localTrack) continue;
+      // Walk up to find the name chip
       let cur = video.parentElement;
       while (cur && cur !== document.body) {
-        // .ZY8hPc.iPFm3e — visible name chip (span inside has the text)
         const nameChip = cur.querySelector('.ZY8hPc.iPFm3e');
         if (nameChip) {
           activeName = cleanName(nameChip.querySelector('span')?.textContent?.trim() ?? nameChip.textContent?.trim());
           if (activeName) break;
         }
-        // .tTdl5d — hidden accessibility button "More options for <Name>"
+        cur = cur.parentElement;
+      }
+      if (activeName) break;
+      activeName = nameFromAncestorAriaLabel(video);
+      if (activeName) break;
+    }
+    // Final fallback: use first ever-seen participant name (likely ourselves in solo view)
+    if (!activeName && seenParticipants.size > 0) {
+      activeName = [...seenParticipants][0];
+    }
+  }
+
+  // ── Remote participant: match trackId → media element → DOM tile ────────────
+  if (!activeName) {
+    // Search both <video> and <audio> elements — modern Meet puts audio on <audio>
+    const mediaEls = [
+      ...document.querySelectorAll('video'),
+      ...document.querySelectorAll('audio'),
+    ];
+
+    for (const el of mediaEls) {
+      if (!el.srcObject) continue;
+      const track = el.srcObject.getAudioTracks?.().find((t) => t.id === loudest.trackId);
+      if (!track) continue;
+
+      // ── Google Meet: walk up to tile container, look for name chip ──────────
+      let cur = el.parentElement;
+      while (cur && cur !== document.body) {
+        const nameChip = cur.querySelector('.ZY8hPc.iPFm3e');
+        if (nameChip) {
+          activeName = cleanName(nameChip.querySelector('span')?.textContent?.trim() ?? nameChip.textContent?.trim());
+          if (activeName) break;
+        }
         const moreBtn = cur.querySelector('.tTdl5d');
         if (moreBtn) {
           const match = (moreBtn.textContent?.trim() ?? '').match(/More options for (.+)/i);
@@ -109,36 +129,29 @@ window.addEventListener('message', (event) => {
         }
         cur = cur.parentElement;
       }
-    }
 
-    // ── [data-participant-id] tile (older Meet UI) + Teams ───────────────────
-    if (!activeName && tile) {
-      activeName = cleanName(tile.getAttribute('aria-label'));
-
+      // ── [data-participant-id] tile (older Meet UI) + Teams ──────────────────
       if (!activeName) {
-        const teamsNameEl = tile.querySelector('[data-tid="roster-participant-display-name"]');
-        activeName = cleanName(teamsNameEl?.textContent?.trim()) ?? null;
-      }
-
-      if (!activeName) {
-        const walker = document.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-          const text = node.textContent?.trim() ?? '';
-          if (text.length >= 2 && text.length <= 60 && !EXCLUDE_NAMES.has(text.toLowerCase()) && !/^\d+$/.test(text)) {
-            activeName = text;
-            break;
+        const tile =
+          el.closest('[data-participant-id]') ??
+          el.closest('[data-requested-participant-id]') ??
+          el.closest('[data-tid="roster-participant"]') ??
+          el.closest('[id^="video-tile-"]') ??
+          el.closest('[class*="video-tile"]');
+        if (tile) {
+          activeName = cleanName(tile.getAttribute('aria-label'));
+          if (!activeName) {
+            const teamsEl = tile.querySelector('[data-tid="roster-participant-display-name"]');
+            activeName = cleanName(teamsEl?.textContent?.trim()) ?? null;
           }
         }
       }
-    }
 
-    // ── Last resort: nearest ancestor with a name-like aria-label ────────────
-    if (!activeName) {
-      activeName = nameFromAncestorAriaLabel(video);
-    }
+      // ── Last resort: ancestor aria-label walk ────────────────────────────────
+      if (!activeName) activeName = nameFromAncestorAriaLabel(el);
 
-    if (activeName) break;
+      if (activeName) break;
+    }
   }
 
   // Only record a new entry when the speaker changes (keeps array compact)

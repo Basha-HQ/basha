@@ -66,12 +66,36 @@
       try {
         const stats = await pc.getStats();
         stats.forEach((stat) => {
-          // inbound-rtp audio stats include audioLevel (0.0 – 1.0) per remote track
+          // inbound-rtp: remote participants
           if (stat.type === 'inbound-rtp' && stat.kind === 'audio' && stat.audioLevel > 0.01) {
             speakers.push({
               trackId: stat.trackIdentifier,
               ssrc: stat.ssrc,
               audioLevel: stat.audioLevel,
+              isLocal: false,
+            });
+          }
+          // outbound-rtp: local user's microphone.
+          // audioLevel is not in outbound-rtp stats directly — use media-source instead.
+        });
+
+        // Local mic level lives in the 'media-source' stat (type='media-source', kind='audio')
+        // linked to the outbound-rtp track via stat.trackIdentifier.
+        stats.forEach((stat) => {
+          if (stat.type === 'media-source' && stat.kind === 'audio' && (stat.audioLevel ?? 0) > 0.01) {
+            // Find the matching outbound-rtp to get the trackIdentifier
+            let trackId = stat.trackIdentifier ?? stat.id;
+            // Also try finding via outbound-rtp that references this source
+            stats.forEach((s) => {
+              if (s.type === 'outbound-rtp' && s.kind === 'audio' && s.mediaSourceId === stat.id) {
+                trackId = s.trackIdentifier ?? trackId;
+              }
+            });
+            speakers.push({
+              trackId,
+              ssrc: null,
+              audioLevel: stat.audioLevel,
+              isLocal: true,
             });
           }
         });
