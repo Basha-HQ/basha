@@ -316,21 +316,21 @@ export async function translateToEnglish(
 
   const sourceLang = sourceLanguage ? (languageMap[sourceLanguage] ?? sourceLanguage) : null;
 
-  // Build request — omit source_language_code when language is unknown/auto.
-  // Sarvam translate can auto-detect when the field is omitted, which is the right
-  // behaviour for translit-mode Tanglish (Sarvam STT lies and returns 'en-IN'
-  // for Roman-script Tamil; omitting the field lets the translate API detect it correctly).
+  // Sarvam translate requires source_language_code — it cannot be omitted.
+  // If we don't know the language (translit mode with no user preference set),
+  // return the original text rather than making a doomed API call.
+  if (!sourceLang || sourceLang === 'auto') {
+    console.warn(`[sarvam] Translation skipped (source language unknown — set speaking_language in profile): "${text.slice(0, 60)}"`);
+    return text;
+  }
+
   const requestBody: Record<string, string> = {
     input: text,
+    source_language_code: sourceLang,
     target_language_code: 'en-IN',
     model: 'mayura:v1',
     mode: 'formal',
   };
-  if (sourceLang && sourceLang !== 'auto') {
-    requestBody.source_language_code = sourceLang;
-  } else {
-    console.log(`[sarvam] Omitting source_language_code — letting Sarvam auto-detect (input: "${text.slice(0, 60)}")`);
-  }
 
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',
