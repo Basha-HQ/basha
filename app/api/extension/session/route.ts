@@ -105,26 +105,44 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { meetingId, participantNames } = body as {
+  const { meetingId, participantNames, activeSpeakerTimeline } = body as {
     meetingId?: string;
     participantNames?: string[];
+    activeSpeakerTimeline?: { name: string; timestampMs: number }[];
   };
 
-  if (!meetingId || !Array.isArray(participantNames) || participantNames.length === 0) {
-    return NextResponse.json({ error: 'meetingId and participantNames required' }, { status: 400 });
+  if (!meetingId) {
+    return NextResponse.json({ error: 'meetingId required' }, { status: 400 });
   }
 
-  const speakerLabels = Object.fromEntries(
-    participantNames
-      .slice(0, 10)
-      .map((name, i) => [`SPEAKER_${String(i).padStart(2, '0')}`, name])
-  );
+  // Build updates dynamically — both fields are optional
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  let paramIdx = 1;
 
+  if (Array.isArray(participantNames) && participantNames.length > 0) {
+    const speakerLabels = Object.fromEntries(
+      participantNames
+        .slice(0, 10)
+        .map((name, i) => [`SPEAKER_${String(i).padStart(2, '0')}`, name])
+    );
+    setClauses.push(`speaker_labels = $${paramIdx++}`);
+    values.push(JSON.stringify(speakerLabels));
+  }
+
+  if (Array.isArray(activeSpeakerTimeline) && activeSpeakerTimeline.length > 0) {
+    setClauses.push(`active_speaker_timeline = $${paramIdx++}`);
+    values.push(JSON.stringify(activeSpeakerTimeline));
+  }
+
+  if (setClauses.length === 0) {
+    return NextResponse.json({ ok: true }); // nothing to update
+  }
+
+  values.push(meetingId, userId);
   await query(
-    `UPDATE meetings
-     SET speaker_labels = $1
-     WHERE id = $2 AND user_id = $3`,
-    [JSON.stringify(speakerLabels), meetingId, userId]
+    `UPDATE meetings SET ${setClauses.join(', ')} WHERE id = $${paramIdx++} AND user_id = $${paramIdx}`,
+    values
   );
 
   return NextResponse.json({ ok: true });

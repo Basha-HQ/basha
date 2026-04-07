@@ -176,11 +176,13 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
 
   await ensureOffscreenDocument();
 
-  // Scrape participant names from the meeting tab DOM
+  // Scrape participant names and RTC active-speaker timeline from the meeting tab DOM
   let participantNames = [];
+  let activeSpeakerTimeline = [];
   try {
     const result = await chrome.tabs.sendMessage(tabId, { type: 'BASHA_GET_PARTICIPANTS' });
     participantNames = result?.participants ?? [];
+    activeSpeakerTimeline = result?.activeSpeakerTimeline ?? [];
   } catch {
     // Could not scrape participant names — non-fatal
   }
@@ -192,6 +194,7 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
       sourceLanguage,
       meetingUrl,
       participantNames,
+      activeSpeakerTimeline,
       startedAt: new Date().toISOString(),
     });
     meetingId = data.meetingId;
@@ -282,18 +285,21 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (!rescrapeTarget?.meetingId || !rescrapeTarget?.tabId) return;
 
     let participants = [];
+    let rescrapeTimeline = [];
     try {
       const result = await chrome.tabs.sendMessage(rescrapeTarget.tabId, { type: 'BASHA_GET_PARTICIPANTS' });
       participants = result?.participants ?? [];
+      rescrapeTimeline = result?.activeSpeakerTimeline ?? [];
     } catch {
       // Tab may have closed — non-fatal
     }
 
-    if (participants.length > 0) {
+    if (participants.length > 0 || rescrapeTimeline.length > 0) {
       try {
         await apiPatch('/api/extension/session', {
           meetingId: rescrapeTarget.meetingId,
           participantNames: participants,
+          activeSpeakerTimeline: rescrapeTimeline,
         });
       } catch {
         // Non-fatal — transcript still processes without speaker names

@@ -17,6 +17,123 @@ const PROMPT_ID = 'basha-record-prompt';
 let promptDismissed = false;
 
 // ---------------------------------------------------------------------------
+// RTC active-speaker timeline (Google Meet only)
+// ---------------------------------------------------------------------------
+
+/**
+ * One entry per speaker-change event during the meeting.
+ * We only push when the active speaker changes (not on every 500ms poll)
+ * so the array stays compact even for long meetings.
+ */
+const activeSpeakerTimeline = []; // { name: string, timestampMs: number }[]
+let lastRTCSpeakerName = null;
+
+/**
+ * Inject injected-rtc.js into the page context so it can hook RTCPeerConnection
+ * (content scripts run in an isolated sandbox and cannot access window.RTCPeerConnection).
+ * Only runs on Google Meet.
+ */
+function injectRTCHook() {
+  // Inject on Google Meet and Microsoft Teams (both use WebRTC)
+  const host = location.hostname;
+  const isSupportedPlatform =
+    host.includes('meet.google.com') ||
+    host.includes('teams.microsoft.com') ||
+    host.includes('teams.live.com');
+  if (!isSupportedPlatform) return;
+  if (document.getElementById('basha-rtc-injected')) return; // guard against double-inject
+  const script = document.createElement('script');
+  script.id = 'basha-rtc-injected';
+  script.src = chrome.runtime.getURL('injected-rtc.js');
+  (document.head || document.documentElement).appendChild(script);
+  // The script tag is kept in DOM intentionally — removing it doesn't un-run it.
+}
+
+/**
+ * Listen for BASHA_RTC_SPEAKERS events from injected-rtc.js.
+ * For each loud track, walk the DOM to find the participant tile video element
+ * whose srcObject contains that track, then extract the participant name.
+ * Only records a new entry when the active speaker changes.
+ */
+window.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'BASHA_RTC_SPEAKERS') return;
+  const { speakers, timestampMs } = event.data;
+
+  // Pick the loudest speaker from this poll tick
+  const loudest = speakers.reduce(
+    (best, s) => (s.audioLevel > (best?.audioLevel ?? 0) ? s : best),
+    null
+  );
+  if (!loudest) return;
+
+  // Find which video element owns this audio track.
+  // Tries Google Meet selectors first, then Microsoft Teams selectors.
+  let activeName = null;
+  for (const video of document.querySelectorAll('video')) {
+    if (!video.srcObject) continue;
+    const track = video.srcObject.getAudioTracks?.().find((t) => t.id === loudest.trackId);
+    if (!track) continue;
+
+    // ── Google Meet tile selectors ──────────────────────────────────────────
+    const meetTile =
+      video.closest('[data-participant-id]') ??
+      video.closest('[data-requested-participant-id]');
+
+    // ── Microsoft Teams tile selectors ──────────────────────────────────────
+    // Teams uses data-tid on participant items and id^="video-tile-" on tiles
+    const teamsTile =
+      video.closest('[data-tid="roster-participant"]') ??
+      video.closest('[id^="video-tile-"]') ??
+      video.closest('[class*="video-tile"]');
+
+    const tile = meetTile ?? teamsTile;
+    if (!tile) continue;
+
+    // Try aria-label first (stable on both platforms)
+    const ariaLabel = tile.getAttribute('aria-label');
+    if (ariaLabel && ariaLabel.length >= 2 && ariaLabel.length <= 80) {
+      const clean = ariaLabel.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*,.*$/, '').trim();
+      if (clean.length >= 2 && !EXCLUDE_NAMES.has(clean.toLowerCase())) {
+        activeName = clean;
+        break;
+      }
+    }
+
+    // Teams-specific: data-tid name label
+    const teamsNameEl = tile.querySelector('[data-tid="roster-participant-display-name"]');
+    if (teamsNameEl) {
+      const text = teamsNameEl.textContent?.trim() ?? '';
+      if (text.length >= 2 && !EXCLUDE_NAMES.has(text.toLowerCase())) {
+        activeName = text;
+        break;
+      }
+    }
+
+    // Fallback: first visible text node in the tile (works for both platforms)
+    const walker = document.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent?.trim() ?? '';
+      if (text.length >= 2 && text.length <= 60 && !EXCLUDE_NAMES.has(text.toLowerCase()) && !/^\d+$/.test(text)) {
+        activeName = text;
+        break;
+      }
+    }
+    if (activeName) break;
+  }
+
+  // Only record a new entry when the speaker changes (keeps array compact)
+  if (activeName && activeName !== lastRTCSpeakerName) {
+    activeSpeakerTimeline.push({ name: activeName, timestampMs });
+    lastRTCSpeakerName = activeName;
+  }
+});
+
+// Inject immediately on load (Meet may already have set up RTCPeerConnections by
+// document_idle, so we inject as early as possible)
+injectRTCHook();
+
+// ---------------------------------------------------------------------------
 // Participant name scraping (Google Meet)
 // ---------------------------------------------------------------------------
 
@@ -393,7 +510,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'BASHA_GET_PARTICIPANTS') {
     // Do a fresh scrape before responding to catch any names not yet in seenParticipants
     scrapeAndAccumulate();
-    sendResponse({ participants: [...seenParticipants] });
+    sendResponse({
+      participants: [...seenParticipants],
+      activeSpeakerTimeline: [...activeSpeakerTimeline],
+    });
   }
   if (message.type === 'RECORDING_STARTED_FROM_PROMPT') {
     removeRecordingPrompt();

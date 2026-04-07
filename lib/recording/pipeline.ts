@@ -11,9 +11,10 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
+import { transcribeAudio, translateToEnglish, splitIntoSegments, type DiarizedEntry } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
+import { translateWithLLM } from '@/lib/ai/llm-translate';
 
 /**
  * Normalise Sarvam speaker IDs to zero-padded SPEAKER_XX format so they match
@@ -29,6 +30,48 @@ function normalizeSpeaker(raw: unknown): string | null {
   const speakerMatch = s.match(/^SPEAKER_?(\d+)$/i);
   if (speakerMatch) return `SPEAKER_${String(parseInt(speakerMatch[1], 10)).padStart(2, '0')}`;
   return s;
+}
+
+/**
+ * Match Sarvam SPEAKER_XX IDs to real participant names using the RTC active-speaker
+ * timeline captured by the Chrome extension content script.
+ *
+ * The timeline is an array of { name, timestampMs } entries — one per speaker-change
+ * event recorded at ~500ms intervals during the meeting via RTCPeerConnection.getStats().
+ * recordingStartMs is the meeting's created_at timestamp in milliseconds.
+ *
+ * For each diarized entry, we look for timeline events that fall within the entry's
+ * time window (±1s tolerance) and vote on which name corresponds to each SPEAKER_XX.
+ * The name with the most votes wins.
+ */
+function matchSpeakersToTimeline(
+  diarizedEntries: DiarizedEntry[],
+  timeline: { name: string; timestampMs: number }[],
+  recordingStartMs: number
+): Record<string, string> {
+  const votes: Record<string, Record<string, number>> = {};
+
+  for (const entry of diarizedEntries) {
+    if (!entry.speaker) continue;
+    const entryStartMs = recordingStartMs + entry.start * 1000;
+    const entryEndMs   = recordingStartMs + entry.end   * 1000;
+
+    const matches = timeline.filter(
+      (t) => t.timestampMs >= entryStartMs - 1000 && t.timestampMs <= entryEndMs + 1000
+    );
+
+    for (const match of matches) {
+      if (!votes[entry.speaker]) votes[entry.speaker] = {};
+      votes[entry.speaker][match.name] = (votes[entry.speaker][match.name] ?? 0) + 1;
+    }
+  }
+
+  const result: Record<string, string> = {};
+  for (const [speaker, nameCounts] of Object.entries(votes)) {
+    const top = Object.entries(nameCounts).sort((a, b) => b[1] - a[1])[0];
+    if (top) result[speaker] = top[0];
+  }
+  return result;
 }
 
 export interface ChunkInput {
@@ -92,6 +135,29 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
               ? sttResult.language_code
               : null);
 
+    // 1b. Match SPEAKER_XX IDs to real names via RTC active-speaker timeline (if available)
+    if (sttResult.diarized_entries?.length) {
+      const meta = await queryOne<{ active_speaker_timeline: unknown; created_at: string }>(
+        'SELECT active_speaker_timeline, created_at FROM meetings WHERE id = $1',
+        [meetingId]
+      );
+      const timeline = Array.isArray(meta?.active_speaker_timeline)
+        ? (meta!.active_speaker_timeline as { name: string; timestampMs: number }[])
+        : [];
+
+      if (timeline.length > 0) {
+        const recordingStartMs = new Date(meta!.created_at).getTime();
+        const matched = matchSpeakersToTimeline(sttResult.diarized_entries, timeline, recordingStartMs);
+        if (Object.keys(matched).length > 0) {
+          await query(
+            'UPDATE meetings SET speaker_labels = $1 WHERE id = $2',
+            [JSON.stringify(matched), meetingId]
+          );
+          console.log('[pipeline] Speaker labels from RTC timeline:', matched);
+        }
+      }
+    }
+
     // 2. Build segments — prefer diarized (real timestamps + speaker) over sentence split
     const segments: Array<{ text: string; startSeconds: number; speaker: string | null }> =
       sttResult.diarized_entries?.length
@@ -127,7 +193,13 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       const seg = segments[i];
       const originalText = seg.text;
       // english_text: translate to English for AI features + search
-      const en = await translateToEnglish(seg.text, detectedLang);
+      let en = await translateToEnglish(seg.text, detectedLang);
+      // If Sarvam bailed out (returned identical text) in translit mode, use LLM fallback.
+      // This handles Tanglish/Hinglish/Tenglish — any Indian language in Roman letters.
+      if (sttMode === 'translit' && en === seg.text) {
+        console.log('[pipeline] Sarvam skipped translation — using LLM fallback for segment', i);
+        en = await translateWithLLM(seg.text);
+      }
       englishSegments.push(en);
 
       await query(

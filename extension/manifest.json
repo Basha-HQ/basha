@@ -60,5 +60,14 @@
     }
   ],
 
-  "web_accessible_resources": []
+  "web_accessible_resources": [
+    {
+      "resources": ["injected-rtc.js"],
+      "matches": [
+        "https://meet.google.com/*",
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*"
+      ]
+    }
+  ]
 }
