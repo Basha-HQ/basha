@@ -87,18 +87,39 @@ window.addEventListener('message', (event) => {
 
     const tile = meetTile ?? teamsTile;
 
-    if (tile) {
-      // Try aria-label on the tile first (stable on both platforms)
+    // ── Google Meet: find the tile container then extract the name ─────────────
+    // Walk up from the video to find the ancestor that holds the name overlay.
+    // We stop at the first ancestor that contains .ZY8hPc.iPFm3e or .tTdl5d
+    // (both live inside the same per-participant tile container).
+    if (!activeName) {
+      let cur = video.parentElement;
+      while (cur && cur !== document.body) {
+        // .ZY8hPc.iPFm3e — visible name chip (span inside has the text)
+        const nameChip = cur.querySelector('.ZY8hPc.iPFm3e');
+        if (nameChip) {
+          activeName = cleanName(nameChip.querySelector('span')?.textContent?.trim() ?? nameChip.textContent?.trim());
+          if (activeName) break;
+        }
+        // .tTdl5d — hidden accessibility button "More options for <Name>"
+        const moreBtn = cur.querySelector('.tTdl5d');
+        if (moreBtn) {
+          const match = (moreBtn.textContent?.trim() ?? '').match(/More options for (.+)/i);
+          activeName = match ? cleanName(match[1]) : null;
+          if (activeName) break;
+        }
+        cur = cur.parentElement;
+      }
+    }
+
+    // ── [data-participant-id] tile (older Meet UI) + Teams ───────────────────
+    if (!activeName && tile) {
       activeName = cleanName(tile.getAttribute('aria-label'));
 
-      // Teams-specific: data-tid name label
       if (!activeName) {
         const teamsNameEl = tile.querySelector('[data-tid="roster-participant-display-name"]');
-        const text = teamsNameEl?.textContent?.trim() ?? '';
-        activeName = cleanName(text) ?? null;
+        activeName = cleanName(teamsNameEl?.textContent?.trim()) ?? null;
       }
 
-      // Fallback: first visible text node in the tile
       if (!activeName) {
         const walker = document.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
         let node;
@@ -112,9 +133,7 @@ window.addEventListener('message', (event) => {
       }
     }
 
-    // ── Newer Google Meet UI fallback ────────────────────────────────────────
-    // Tiles are plain divs with aria-label="Name" (no data-participant-id).
-    // Walk up from the video element to find the nearest name-like aria-label.
+    // ── Last resort: nearest ancestor with a name-like aria-label ────────────
     if (!activeName) {
       activeName = nameFromAncestorAriaLabel(video);
     }
@@ -185,13 +204,35 @@ const seenParticipants = new Set();
 function scrapeParticipants() {
   const names = new Set();
 
-  // Approach 1: data-participant-id / data-requested-participant-id tiles (most stable — data
-  // attributes are not obfuscated by Google's build tooling unlike class names).
+  // Approach 1: Google Meet name overlay — .ZY8hPc.iPFm3e
+  // This is the visible bottom-left name chip on each video tile. Contains a
+  // <span> with the participant's display name.
+  document.querySelectorAll('.ZY8hPc.iPFm3e').forEach((el) => {
+    const name = cleanName(el.querySelector('span')?.textContent?.trim() ?? el.textContent?.trim());
+    if (name) names.add(name);
+  });
+
+  // Approach 2: Hidden "More options for <Name>" accessibility button inside .tTdl5d
+  // display:none but contains the full name reliably.
+  document.querySelectorAll('.tTdl5d').forEach((el) => {
+    const text = el.textContent?.trim() ?? '';
+    const match = text.match(/More options for (.+)/i);
+    if (match) {
+      const name = cleanName(match[1]);
+      if (name) names.add(name);
+    }
+  });
+
+  // Approach 3: Tooltip element .ne2Ple-oshW8e-V67aGc (also contains the name)
+  document.querySelectorAll('.ne2Ple-oshW8e-V67aGc').forEach((el) => {
+    const name = cleanName(el.textContent?.trim());
+    if (name) names.add(name);
+  });
+
+  // Approach 4: data-participant-id / data-requested-participant-id tiles (older Meet UI)
   document.querySelectorAll('[data-participant-id], [data-requested-participant-id]').forEach((tile) => {
-    // aria-label on the tile often contains the full name (e.g. "Alice Johnson (Muted)")
     const name = cleanName(tile.getAttribute('aria-label'));
     if (name) { names.add(name); return; }
-    // Walk leaf text nodes inside the tile — first non-trivial one is usually the name
     const walker = document.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) {
@@ -203,16 +244,14 @@ function scrapeParticipants() {
     }
   });
 
-  // Approach 2: aria-label ancestor walk from each <video> element.
-  // Handles newer Google Meet UI where participant tiles are plain divs with
-  // aria-label="Saisiddharth" rather than [data-participant-id] elements.
-  // (Observed in accessibility tree: generic "Saisiddharth" focusable: true → StaticText "Saisiddharth")
+  // Approach 5: aria-label ancestor walk from each <video> element.
+  // Handles cases where tiles are plain divs with aria-label="Name".
   document.querySelectorAll('video').forEach((video) => {
     const name = nameFromAncestorAriaLabel(video);
     if (name) names.add(name);
   });
 
-  // Approach 3: class-based selectors (Google Meet internal names — may change over time)
+  // Approach 6: obfuscated class-based selectors (last resort — may change over time)
   if (names.size === 0) {
     const selectors = ['.zWfAib', '.KF4T6b', '.cS7aqe', '.YTbUzc', '.dwSJ2e'];
     for (const sel of selectors) {
