@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth/config';
 import { queryOne, query } from '@/lib/db';
 import { notFound } from 'next/navigation';
+import { resolveSpeakerLabelsFromTranscripts } from '@/lib/recording/speakerLabels';
 import { TranscriptViewer } from '@/components/transcript/TranscriptViewer';
 import { MeetingSummaryCard } from '@/components/transcript/MeetingSummaryCard';
 import { MeetingStatusPoller } from '@/components/meetings/MeetingStatusPoller';
@@ -76,6 +77,21 @@ export default async function MeetingDetailPage({
     [userId, id]
   );
   const flaggedSegmentIds = flaggedRows.map((r) => r.transcript_id);
+
+  // Lazy self-heal: older meetings may have speaker_labels keyed positionally
+  // (SPEAKER_00/01 from the extension session route) while the actual Sarvam
+  // diarization produced different IDs — resulting in "Speaker 2" fallbacks in
+  // the UI. resolveSpeakerLabelsFromTranscripts is idempotent: it only writes
+  // when the labels genuinely need updating. Run for completed meetings only.
+  let resolvedSpeakerLabels = meeting.speaker_labels;
+  if (meeting.status === 'completed' && transcripts.some((t) => t.speaker)) {
+    try {
+      const resolved = await resolveSpeakerLabelsFromTranscripts(id);
+      if (resolved) resolvedSpeakerLabels = resolved;
+    } catch (err) {
+      console.error('[meeting-page] speaker label self-heal failed:', err);
+    }
+  }
 
   const summary = meeting.summary ? JSON.parse(meeting.summary) : null;
 
@@ -244,10 +260,10 @@ export default async function MeetingDetailPage({
               audioPath={meeting.audio_path ? `/api/meetings/${id}/audio` : undefined}
               knownDuration={meeting.duration ?? undefined}
               flaggedSegmentIds={flaggedSegmentIds}
-              speakerLabels={meeting.speaker_labels ?? undefined}
+              speakerLabels={resolvedSpeakerLabels ?? undefined}
               suggestedParticipantNames={
-                meeting.speaker_labels
-                  ? Object.values(meeting.speaker_labels).filter(
+                resolvedSpeakerLabels
+                  ? Object.values(resolvedSpeakerLabels).filter(
                       (v) => v && !v.startsWith('SPEAKER_')
                     )
                   : undefined
