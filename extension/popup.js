@@ -181,8 +181,15 @@ document.getElementById('btn-stop').addEventListener('click', async () => {
 // Navigation buttons
 // ---------------------------------------------------------------------------
 
-document.getElementById('btn-open-meet').addEventListener('click', () => {
-  chrome.tabs.create({ url: 'https://meet.google.com' });
+document.getElementById('btn-open-meet').addEventListener('click', async () => {
+  // Open the platform the user last recorded on, or Google Meet as default
+  const { lastMeetingUrl } = await chrome.storage.local.get('lastMeetingUrl');
+  let url = 'https://meet.google.com/new';
+  if (lastMeetingUrl) {
+    if (lastMeetingUrl.includes('zoom.us')) url = 'https://zoom.us/start/videomeeting';
+    else if (lastMeetingUrl.includes('teams.microsoft.com') || lastMeetingUrl.includes('teams.live.com')) url = 'https://teams.microsoft.com';
+  }
+  chrome.tabs.create({ url });
 });
 
 document.getElementById('btn-view-notes').addEventListener('click', () => {

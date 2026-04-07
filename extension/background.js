@@ -224,6 +224,9 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
     status: 'recording',
   });
 
+  // Remember which platform the user last recorded on — used by the popup CTA
+  if (meetingUrl) chrome.storage.local.set({ lastMeetingUrl: meetingUrl });
+
   // Schedule a delayed re-scrape of participant names in case the initial scrape
   // ran before Google Meet rendered participant tiles (document_idle fires before
   // React/Meet JS finishes building the participant list).
