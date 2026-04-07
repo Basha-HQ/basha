@@ -161,20 +161,38 @@ const EXCLUDE_NAMES = new Set([
   'message', 'spotlight', 'tile', 'participant', 'host',
 ]);
 
+// Words that appear in UI instruction labels (tooltips, keyboard hints, ARIA).
+// Any candidate name containing one of these is rejected.
+const INSTRUCTION_WORDS = new Set([
+  'press', 'arrow', 'escape', 'hover', 'tray', 'click', 'drag',
+  'scroll', 'swipe', 'button', 'keyboard', 'shortcut', 'open', 'close',
+  'expand', 'collapse', 'navigate', 'select', 'focus',
+]);
+
 /**
  * Clean and validate a candidate name string.
- * Returns the cleaned name or null if it looks like a UI label / junk.
+ * Returns the cleaned name, or null if it looks like a UI label / junk.
+ *
+ * Rules:
+ *   - Strip parenthetical suffixes "(Muted)", ", unmuted", etc.
+ *   - 2–60 characters after cleaning
+ *   - At most 4 words (real names are 1–4 words; longer = instruction text)
+ *   - None of the words appear in INSTRUCTION_WORDS
+ *   - Not in EXCLUDE_NAMES
+ *   - Not a pure number
  */
 function cleanName(raw) {
   if (!raw) return null;
   const clean = raw.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*,.*$/, '').trim();
+  if (!clean || clean.length < 2 || clean.length > 60) return null;
+  const words = clean.split(/\s+/);
   if (
-    clean.length >= 2 &&
-    clean.length <= 80 &&
-    !EXCLUDE_NAMES.has(clean.toLowerCase()) &&
-    !/^\d+$/.test(clean)
-  ) return clean;
-  return null;
+    words.length > 4 ||
+    EXCLUDE_NAMES.has(clean.toLowerCase()) ||
+    /^\d+$/.test(clean) ||
+    words.some((w) => INSTRUCTION_WORDS.has(w.toLowerCase()))
+  ) return null;
+  return clean;
 }
 
 /**
@@ -223,13 +241,7 @@ function scrapeParticipants() {
     }
   });
 
-  // Approach 3: Tooltip element .ne2Ple-oshW8e-V67aGc (also contains the name)
-  document.querySelectorAll('.ne2Ple-oshW8e-V67aGc').forEach((el) => {
-    const name = cleanName(el.textContent?.trim());
-    if (name) names.add(name);
-  });
-
-  // Approach 4: data-participant-id / data-requested-participant-id tiles (older Meet UI)
+  // Approach 3: data-participant-id / data-requested-participant-id tiles (older Meet UI)
   document.querySelectorAll('[data-participant-id], [data-requested-participant-id]').forEach((tile) => {
     const name = cleanName(tile.getAttribute('aria-label'));
     if (name) { names.add(name); return; }
@@ -244,14 +256,14 @@ function scrapeParticipants() {
     }
   });
 
-  // Approach 5: aria-label ancestor walk from each <video> element.
+  // Approach 4: aria-label ancestor walk from each <video> element.
   // Handles cases where tiles are plain divs with aria-label="Name".
   document.querySelectorAll('video').forEach((video) => {
     const name = nameFromAncestorAriaLabel(video);
     if (name) names.add(name);
   });
 
-  // Approach 6: obfuscated class-based selectors (last resort — may change over time)
+  // Approach 5: obfuscated class-based selectors (last resort — may change over time)
   if (names.size === 0) {
     const selectors = ['.zWfAib', '.KF4T6b', '.cS7aqe', '.YTbUzc', '.dwSJ2e'];
     for (const sel of selectors) {
