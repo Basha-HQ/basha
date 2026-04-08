@@ -362,6 +362,64 @@ export async function translateToEnglish(
 }
 
 /**
+ * Transliterate native-script Indian language text to Roman script using Sarvam AI.
+ * Uses the /translate endpoint with same source and target language + output_script: 'roman'.
+ */
+export async function transliterateToRoman(
+  text: string,
+  sourceLanguage: string | null
+): Promise<string> {
+  const apiKey = process.env.SARVAM_AI_API_KEY;
+  if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
+
+  const languageMap: Record<string, string> = {
+    ta: 'ta-IN',
+    hi: 'hi-IN',
+    te: 'te-IN',
+    kn: 'kn-IN',
+    ml: 'ml-IN',
+    mr: 'mr-IN',
+    bn: 'bn-IN',
+    gu: 'gu-IN',
+    pa: 'pa-IN',
+    or: 'or-IN',
+    en: 'en-IN',
+    auto: 'auto',
+    unknown: 'auto',
+  };
+
+  const lang = sourceLanguage ? (languageMap[sourceLanguage] ?? sourceLanguage) : null;
+
+  if (!lang || lang === 'auto') {
+    console.warn('[sarvam] Transliteration skipped (unknown source language): returning original');
+    return text;
+  }
+
+  const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
+    method: 'POST',
+    headers: {
+      'api-subscription-key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: text,
+      source_language_code: lang,
+      target_language_code: lang,  // same language = transliterate, not translate
+      output_script: 'roman',
+      model: 'mayura:v1',
+    }),
+  });
+
+  if (!response.ok) {
+    console.warn(`[sarvam] Transliteration failed (${response.status}): returning original`);
+    return text;
+  }
+
+  const data: SarvamTranslationResponse = await response.json();
+  return data.translated_text;
+}
+
+/**
  * Split a full transcript into segments for processing.
  * saaras:v3 returns a single transcript string; this splits it by sentence.
  */

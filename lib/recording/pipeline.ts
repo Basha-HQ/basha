@@ -11,10 +11,9 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { transcribeAudio, translateToEnglish, splitIntoSegments } from '@/lib/ai/sarvam';
+import { transcribeAudio, translateToEnglish, splitIntoSegments, transliterateToRoman } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
-import { translateWithLLM } from '@/lib/ai/llm-translate';
 import {
   normalizeSpeaker,
   actualSpeakerIdsFromDiarized,
@@ -52,9 +51,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 
   try {
     // 1. Transcribe with Sarvam AI (WebM/Opus, MP4, WAV, MP3 all supported)
-    // Use 'translit' mode for Roman output (Romanized text directly from STT),
-    // 'transcribe' for native script output
-    const sttMode = outputScript === 'roman' ? 'translit' : 'transcribe';
+    // Always use 'transcribe' mode (native script) so we can run transliteration
+    // and translation in parallel from the same source text.
+    // Roman output is produced separately via transliterateToRoman.
+    const sttMode = 'transcribe';
     const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode);
 
     console.log('[pipeline] STT result — transcript length:', sttResult.transcript?.length,
@@ -69,19 +69,14 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     }
 
     // Resolve language for translation.
-    // Priority: explicit sourceLanguage > user's speaking_language profile > STT result.
-    // In 'translit' mode Sarvam always returns language_code='en-IN' regardless of actual
-    // speech — using it would cause source==target rejection from the translate API.
-    // Instead, use the user's speaking_language (e.g. 'ta') if set, or null to trigger
-    // Sarvam translate's own auto-detection (omit source_language_code from request).
+    // Priority: explicit sourceLanguage > STT-detected language.
+    // We now always use 'transcribe' mode so Sarvam returns the real language_code.
     const detectedLang: string | null =
       (sourceLanguage && sourceLanguage !== 'auto')
         ? sourceLanguage
-        : sttMode === 'translit'
-          ? (speakingLanguage && speakingLanguage !== 'auto' ? speakingLanguage : null)
-          : (sttResult.language_code && sttResult.language_code !== 'unknown'
-              ? sttResult.language_code
-              : null);
+        : (sttResult.language_code && sttResult.language_code !== 'unknown'
+            ? sttResult.language_code
+            : null);
 
     // 1b. Resolve real speaker names for Sarvam's SPEAKER_XX IDs. See
     // lib/recording/speakerLabels.ts for the 3-tier fallback strategy.
@@ -121,21 +116,24 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       console.log('[pipeline] First segment:', JSON.stringify(segments[0]));
     }
 
-    // 3. Translate each segment, then insert transcript rows
-    // original_text comes directly from STT (already in the correct script via sttMode)
+    // 3. Translate + transliterate each segment, then insert transcript rows.
+    // For roman outputScript: run translation (native → English) and transliteration
+    // (native → Roman) in parallel from the same native-script STT output.
+    // For native outputScript: just translate to English, store native script as-is.
     const englishSegments: string[] = [];
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
-      const originalText = seg.text;
-      // english_text: translate to English for AI features + search
-      // In translit mode Sarvam outputs Roman-script Indian language text (Tanglish, Hinglish,
-      // etc.). Sarvam's translate API is designed for native-script → English and does not work
-      // reliably for Roman-script input. Skip it and go straight to the LLM fallback.
       let en: string;
-      if (sttMode === 'translit') {
-        en = await translateWithLLM(seg.text);
+      let storedText: string;
+
+      if (outputScript === 'roman') {
+        [en, storedText] = await Promise.all([
+          translateToEnglish(seg.text, detectedLang),
+          transliterateToRoman(seg.text, detectedLang),
+        ]);
       } else {
         en = await translateToEnglish(seg.text, detectedLang);
+        storedText = seg.text;
       }
       englishSegments.push(en);
 
@@ -143,7 +141,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
         `INSERT INTO transcripts
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [meetingId, i, seg.startSeconds, originalText, en, seg.speaker]
+        [meetingId, i, seg.startSeconds, storedText, en, seg.speaker]
       );
     }
 
@@ -215,7 +213,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
     sourceLanguage, outputScript = 'roman', isFinal, duration,
   } = input;
 
-  const sttMode = outputScript === 'roman' ? 'translit' : 'transcribe';
+  const sttMode = 'transcribe';  // always native script; Roman is produced via transliterateToRoman
 
   // Only run STT if the chunk has meaningful audio (very small blobs = silence / empty tail)
   const MIN_AUDIO_BYTES = 5_000;
@@ -264,15 +262,27 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
     );
     const indexOffset = (idxRow?.max_index ?? -1) + 1;
 
-    // Translate and insert each segment
+    // Translate + transliterate each segment in parallel (roman mode), or just translate (native)
     for (let i = 0; i < rawSegments.length; i++) {
       const seg = rawSegments[i];
-      const en = await translateToEnglish(seg.text, detectedLang);
+      let en: string;
+      let storedText: string;
+
+      if (outputScript === 'roman') {
+        [en, storedText] = await Promise.all([
+          translateToEnglish(seg.text, detectedLang),
+          transliterateToRoman(seg.text, detectedLang),
+        ]);
+      } else {
+        en = await translateToEnglish(seg.text, detectedLang);
+        storedText = seg.text;
+      }
+
       await query(
         `INSERT INTO transcripts
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [meetingId, indexOffset + i, seg.startSeconds, seg.text, en, seg.speaker]
+        [meetingId, indexOffset + i, seg.startSeconds, storedText, en, seg.speaker]
       );
     }
 
