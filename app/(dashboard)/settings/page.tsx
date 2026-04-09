@@ -1,4 +1,5 @@
 import { ExtensionIntegration } from '@/components/settings/ExtensionIntegration';
+import { TranscriptPreferences } from '@/components/settings/TranscriptPreferences';
 
 export const metadata = { title: 'Settings — Basha' };
 
@@ -23,12 +24,17 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            Manage your integrations.
+            Manage your preferences and integrations.
           </p>
         </div>
 
-        <div id="integrations" className="animate-fade-up-2">
-          <ExtensionIntegration />
+        <div className="space-y-4">
+          <div id="transcript" className="animate-fade-up-2">
+            <TranscriptPreferences />
+          </div>
+          <div id="integrations" className="animate-fade-up-3">
+            <ExtensionIntegration />
+          </div>
         </div>
       </div>
     </div>
