@@ -119,8 +119,7 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   const destination = audioContext.createMediaStreamDestination();
 
   const tabSource = audioContext.createMediaStreamSource(tabStream);
-  tabSource.connect(destination);           // for recording
-  tabSource.connect(audioContext.destination); // route back to speakers so user can still hear
+  tabSource.connect(destination); // for recording
 
   if (micStream) {
     const micSource = audioContext.createMediaStreamSource(micStream);
@@ -134,7 +133,7 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     ? 'audio/webm;codecs=opus'
     : 'audio/webm';
 
-  mediaRecorder = new MediaRecorder(recordingStream, { mimeType });
+  mediaRecorder = new MediaRecorder(recordingStream, { mimeType, audioBitsPerSecond: 128_000 });
 
   mediaRecorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
