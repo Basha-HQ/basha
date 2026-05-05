@@ -57,12 +57,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Meeting already completed' }, { status: 409 });
     }
 
-    // Fetch user output script preference
-    const userPrefs = await queryOne<{ output_script: string }>(
-      `SELECT output_script FROM users WHERE id = $1`,
-      [userId]
-    );
-
     const ext = audioFile.name?.split('.').pop() || 'webm';
     const fileName = `${meetingId}_chunk${chunkIndex}.${ext}`;
     const audioBuffer = Buffer.from(await audioFile.arrayBuffer());
@@ -81,7 +75,6 @@ export async function POST(req: NextRequest) {
         fileName,
         chunkStartSeconds,
         sourceLanguage: meeting.source_language ?? 'auto',
-        outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
         isFinal,
         duration,
       }).catch((err) => {

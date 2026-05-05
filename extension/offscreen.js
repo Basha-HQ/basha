@@ -119,7 +119,8 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   const destination = audioContext.createMediaStreamDestination();
 
   const tabSource = audioContext.createMediaStreamSource(tabStream);
-  tabSource.connect(destination); // for recording
+  tabSource.connect(destination);              // for recording
+  tabSource.connect(audioContext.destination); // playback to user's speakers (Chrome's tabCapture mutes the tab's own playback)
 
   if (micStream) {
     const micSource = audioContext.createMediaStreamSource(micStream);

@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     );
 
     // Fetch user preferences
-    const userPrefs = await queryOne<{ output_script: string; speaking_language: string }>(
-      `SELECT output_script, speaking_language FROM users WHERE id = $1`,
+    const userPrefs = await queryOne<{ speaking_language: string }>(
+      `SELECT speaking_language FROM users WHERE id = $1`,
       [userId]
     );
 
@@ -78,7 +78,6 @@ export async function POST(req: NextRequest) {
         audioBuffer,
         fileName,
         sourceLanguage: meeting.source_language ?? 'auto',
-        outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
         speakingLanguage: userPrefs?.speaking_language ?? undefined,
       }).catch((err) => {
         console.error(`[extension/upload] Pipeline error for meeting ${meetingId}:`, err);

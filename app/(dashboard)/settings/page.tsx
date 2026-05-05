@@ -1,5 +1,4 @@
 import { ExtensionIntegration } from '@/components/settings/ExtensionIntegration';
-import { TranscriptPreferences } from '@/components/settings/TranscriptPreferences';
 
 export const metadata = { title: 'Settings — Basha' };
 
@@ -29,10 +28,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-4">
-          <div id="transcript" className="animate-fade-up-2">
-            <TranscriptPreferences />
-          </div>
-          <div id="integrations" className="animate-fade-up-3">
+          <div id="integrations" className="animate-fade-up-2">
             <ExtensionIntegration />
           </div>
         </div>

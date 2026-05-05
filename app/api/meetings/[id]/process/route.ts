@@ -31,8 +31,8 @@ export async function POST(
     [id, session.user.id]
   );
 
-  const userPrefs = await queryOne<{ output_script: string; speaking_language: string }>(
-    'SELECT output_script, speaking_language FROM users WHERE id = $1',
+  const userPrefs = await queryOne<{ speaking_language: string }>(
+    'SELECT speaking_language FROM users WHERE id = $1',
     [session.user.id]
   );
 
@@ -89,7 +89,6 @@ export async function POST(
       audioBuffer,
       fileName,
       sourceLanguage: meeting.source_language ?? 'auto',
-      outputScript: (userPrefs?.output_script ?? 'roman') as 'roman' | 'fully-native' | 'spoken-form-in-native',
       speakingLanguage: userPrefs?.speaking_language ?? undefined,
     });
 
