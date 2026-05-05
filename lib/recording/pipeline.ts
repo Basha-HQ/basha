@@ -69,14 +69,25 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     }
 
     // Resolve language for translation.
-    // Priority: explicit sourceLanguage > STT-detected language.
-    // We now always use 'transcribe' mode so Sarvam returns the real language_code.
+    // Priority:
+    //   1. Explicit sourceLanguage (user-set, not 'auto')
+    //   2. Sarvam-detected non-English language (trust clear detections)
+    //   3. User's speaking_language profile preference (overrides English mis-detection
+    //      on code-mixed Indian-English recordings where Sarvam often returns 'en-IN')
+    //   4. Sarvam-detected English (last resort)
+    const sttLang = sttResult.language_code && sttResult.language_code !== 'unknown'
+      ? sttResult.language_code
+      : null;
+    const INDIAN_LANGS = ['ta', 'hi', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or'];
+    const speakingLangCode = speakingLanguage && INDIAN_LANGS.includes(speakingLanguage)
+      ? `${speakingLanguage}-IN`
+      : null;
     const detectedLang: string | null =
       (sourceLanguage && sourceLanguage !== 'auto')
         ? sourceLanguage
-        : (sttResult.language_code && sttResult.language_code !== 'unknown'
-            ? sttResult.language_code
-            : null);
+        : (sttLang && sttLang !== 'en-IN')
+          ? sttLang
+          : speakingLangCode ?? sttLang ?? null;
 
     // 1b. Resolve real speaker names for Sarvam's SPEAKER_XX IDs. See
     // lib/recording/speakerLabels.ts for the 3-tier fallback strategy.

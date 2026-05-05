@@ -203,6 +203,7 @@ function cleanName(raw) {
     words.length > 4 ||
     EXCLUDE_NAMES.has(clean.toLowerCase()) ||
     /^\d+$/.test(clean) ||
+    /[_]/.test(clean) ||
     words.some((w) => INSTRUCTION_WORDS.has(w.toLowerCase()))
   ) return null;
   return clean;
