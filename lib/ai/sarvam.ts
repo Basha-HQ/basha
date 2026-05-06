@@ -42,13 +42,15 @@ async function transcribeAudioSync(
   apiKey: string,
   audioBuffer: Buffer,
   fileName: string,
-  sttMode: string = 'transcribe'
+  sttMode: string = 'transcribe',
+  languageCode?: string
 ): Promise<SarvamSTTResponse> {
   const formData = new FormData();
   const blob = new Blob([audioBuffer.buffer as ArrayBuffer], { type: mimeTypeForFile(fileName) });
   formData.append('file', blob, fileName);
   formData.append('model', 'saaras:v3');
   formData.append('mode', sttMode);
+  if (languageCode) formData.append('language_code', languageCode);
   // NOTE: Sarvam's real-time (sync) API does NOT support with_diarization.
   // Diarization is only available via the batch API (transcribeAudioBatch).
 
@@ -72,7 +74,8 @@ async function transcribeAudioBatch(
   apiKey: string,
   audioBuffer: Buffer,
   fileName: string,
-  sttMode: string = 'transcribe'
+  sttMode: string = 'transcribe',
+  languageCode?: string
 ): Promise<SarvamSTTResponse> {
   const headers = { 'api-subscription-key': apiKey, 'Content-Type': 'application/json' };
 
@@ -86,6 +89,7 @@ async function transcribeAudioBatch(
         mode: sttMode,
         with_timestamps: true,
         with_diarization: true,
+        ...(languageCode ? { language_code: languageCode } : {}),
       },
     }),
   });
@@ -266,21 +270,22 @@ async function transcribeAudioBatch(
 export async function transcribeAudio(
   audioBuffer: Buffer,
   fileName: string,
-  sttMode: string = 'transcribe'
+  sttMode: string = 'transcribe',
+  languageCode?: string
 ): Promise<SarvamSTTResponse> {
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
   // Try sync API first — it handles WebM/Opus natively via multipart upload
   try {
-    console.log(`[sarvam] Trying sync STT for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB) mode=${sttMode}`);
-    return await transcribeAudioSync(apiKey, audioBuffer, fileName, sttMode);
+    console.log(`[sarvam] Trying sync STT for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB) mode=${sttMode} lang=${languageCode ?? 'auto'}`);
+    return await transcribeAudioSync(apiKey, audioBuffer, fileName, sttMode, languageCode);
   } catch (syncErr) {
     const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
     // If sync fails due to duration limit, fall back to batch
     if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size')) {
       console.log(`[sarvam] Sync STT rejected (likely >30s), falling back to batch: ${msg}`);
-      return transcribeAudioBatch(apiKey, audioBuffer, fileName, sttMode);
+      return transcribeAudioBatch(apiKey, audioBuffer, fileName, sttMode, languageCode);
     }
     // Any other sync error — re-throw
     throw syncErr;

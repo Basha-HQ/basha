@@ -232,7 +232,7 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
   // React/Meet JS finishes building the participant list).
   // Store tabId alongside meetingId so the alarm handler knows which tab to scrape.
   await chrome.storage.session.set({ rescrapeTarget: { meetingId, tabId } });
-  chrome.alarms.create('basha-rescrape-speakers', { delayInMinutes: 10 / 60 }); // ~10 seconds
+  chrome.alarms.create('basha-rescrape-speakers', { delayInMinutes: 20 / 60 }); // ~20 seconds — Meet renders participant tiles asynchronously
 
   notifyPopup({ isRecording: true, meetingId, startedAt: Date.now(), status: 'recording' });
   return { success: true, meetingId };

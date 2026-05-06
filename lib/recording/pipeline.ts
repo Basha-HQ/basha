@@ -55,7 +55,13 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // and translation in parallel from the same source text.
     // Roman output is produced separately via transliterateToRoman.
     const sttMode = 'transcribe';
-    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode);
+    // Pass the user's speaking language as a hint so Sarvam returns native script
+    // even for code-mixed Tamil-English recordings (without this it auto-detects en-IN).
+    const INDIAN_LANGS = ['ta', 'hi', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or'];
+    const sttLanguageCode = speakingLanguage && INDIAN_LANGS.includes(speakingLanguage)
+      ? `${speakingLanguage}-IN`
+      : undefined;
+    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode, sttLanguageCode);
 
     console.log('[pipeline] STT result — transcript length:', sttResult.transcript?.length,
       '| language:', sttResult.language_code,
@@ -78,7 +84,6 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     const sttLang = sttResult.language_code && sttResult.language_code !== 'unknown'
       ? sttResult.language_code
       : null;
-    const INDIAN_LANGS = ['ta', 'hi', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or'];
     const speakingLangCode = speakingLanguage && INDIAN_LANGS.includes(speakingLanguage)
       ? `${speakingLanguage}-IN`
       : null;

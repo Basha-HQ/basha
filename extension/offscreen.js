@@ -23,6 +23,7 @@ let activeMeetingId = null;
 let recordingStartTime = null;
 let audioContext = null;
 let uploadCredentials = null; // { token, origin }
+let tabPlayback = null; // Audio element for tab audio playback (bypasses Web Audio resampling)
 
 let chunkIndex = 0;          // monotonically increasing sequence number
 let flushInterval = null;     // setInterval handle for periodic flushing
@@ -118,9 +119,14 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
   audioContext = new AudioContext();
   const destination = audioContext.createMediaStreamDestination();
 
+  // Play tab audio directly via Audio element — avoids Web Audio resampling artifacts
+  // that cause muffling when AudioContext sample rate differs from the stream's rate.
+  tabPlayback = new Audio();
+  tabPlayback.srcObject = tabStream;
+  tabPlayback.play().catch(() => {});
+
   const tabSource = audioContext.createMediaStreamSource(tabStream);
-  tabSource.connect(destination);              // for recording
-  tabSource.connect(audioContext.destination); // playback to user's speakers (Chrome's tabCapture mutes the tab's own playback)
+  tabSource.connect(destination); // for recording only
 
   if (micStream) {
     const micSource = audioContext.createMediaStreamSource(micStream);
@@ -159,6 +165,7 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
 
     // Stop all tracks to release microphone/tab audio
     allStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+    if (tabPlayback) { tabPlayback.pause(); tabPlayback.srcObject = null; tabPlayback = null; }
     if (audioContext) {
       audioContext.close().catch(() => {});
       audioContext = null;
