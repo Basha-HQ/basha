@@ -11,7 +11,7 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { transcribeAudio, translateToEnglish, splitIntoSegments, transliterateToRoman } from '@/lib/ai/sarvam';
+import { transcribeAudio, translateToEnglish, splitIntoSegments, transliterateToRoman, detectLanguageFromScript } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 import {
@@ -27,6 +27,7 @@ export interface ChunkInput {
   fileName: string;        // e.g. "uuid_chunk0.webm"
   chunkStartSeconds: number; // seconds elapsed since recording start (timestamp offset)
   sourceLanguage: string;
+  speakingLanguage?: string; // user's profile speaking language — fallback for Latin-script code-mixed
   outputScript?: 'roman' | 'fully-native' | 'spoken-form-in-native';
   isFinal: boolean;        // true on last chunk → triggers summary + completion
   duration?: number;       // total meeting duration (seconds), only on final chunk
@@ -76,11 +77,13 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 
     // Resolve language for translation.
     // Priority:
-    //   1. Explicit sourceLanguage (user-set, not 'auto')
-    //   2. Sarvam-detected non-English language (trust clear detections)
-    //   3. User's speaking_language profile preference (overrides English mis-detection
-    //      on code-mixed Indian-English recordings where Sarvam often returns 'en-IN')
-    //   4. Sarvam-detected English (last resort)
+    //   1. Unicode script fingerprint of the transcribed text — most reliable; works
+    //      even when Sarvam returns 'en-IN' for code-mixed Indian-English recordings
+    //   2. Explicit sourceLanguage (user-set, not 'auto')
+    //   3. Sarvam-detected non-English language (trust clear detections)
+    //   4. User's speaking_language profile preference (fallback for Latin-script code-mixed)
+    //   5. Sarvam-detected language (last resort, even 'en-IN')
+    const scriptLang = detectLanguageFromScript(sttResult.transcript);
     const sttLang = sttResult.language_code && sttResult.language_code !== 'unknown'
       ? sttResult.language_code
       : null;
@@ -88,11 +91,14 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       ? `${speakingLanguage}-IN`
       : null;
     const detectedLang: string | null =
-      (sourceLanguage && sourceLanguage !== 'auto')
-        ? sourceLanguage
-        : (sttLang && sttLang !== 'en-IN')
-          ? sttLang
-          : speakingLangCode ?? sttLang ?? null;
+      scriptLang ??
+      ((sourceLanguage && sourceLanguage !== 'auto') ? sourceLanguage : null) ??
+      (sttLang && sttLang !== 'en-IN' ? sttLang : null) ??
+      speakingLangCode ??
+      sttLang ??
+      null;
+
+    console.log('[pipeline] Language resolution — script:', scriptLang, '| stt:', sttLang, '| speaking:', speakingLangCode, '→ final:', detectedLang);
 
     // 1b. Resolve real speaker names for Sarvam's SPEAKER_XX IDs. See
     // lib/recording/speakerLabels.ts for the 3-tier fallback strategy.
@@ -132,13 +138,28 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       console.log('[pipeline] First segment:', JSON.stringify(segments[0]));
     }
 
-    // 3. Translate + transliterate each segment, then insert transcript rows.
+    // 3. Deduplicate segments — Sarvam diarization can assign the same speech to multiple
+    // speakers simultaneously. Drop any segment whose text+timestamp duplicates a prior one
+    // within a 2-second window (keep the first occurrence).
+    const seen: Array<{ text: string; startSeconds: number }> = [];
+    const dedupedSegments = segments.filter((seg) => {
+      const norm = seg.text.trim().toLowerCase();
+      const isDuplicate = seen.some(
+        (s) => s.text === norm && Math.abs(s.startSeconds - seg.startSeconds) <= 2
+      );
+      if (!isDuplicate) seen.push({ text: norm, startSeconds: seg.startSeconds });
+      return !isDuplicate;
+    });
+
+    console.log(`[pipeline] Segments after dedup: ${dedupedSegments.length} (was ${segments.length})`);
+
+    // 4. Translate + transliterate each segment, then insert transcript rows.
     // For roman outputScript: run translation (native → English) and transliteration
     // (native → Roman) in parallel from the same native-script STT output.
     // For native outputScript: just translate to English, store native script as-is.
     const englishSegments: string[] = [];
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
+    for (let i = 0; i < dedupedSegments.length; i++) {
+      const seg = dedupedSegments[i];
       let en: string;
       let storedText: string;
 
@@ -156,7 +177,8 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       await query(
         `INSERT INTO transcripts
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (meeting_id, segment_index) DO NOTHING`,
         [meetingId, i, seg.startSeconds, storedText, en, seg.speaker]
       );
     }
@@ -226,22 +248,33 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 export async function processAudioChunk(input: ChunkInput): Promise<void> {
   const {
     meetingId, audioBuffer, fileName, chunkStartSeconds,
-    sourceLanguage, outputScript = 'roman', isFinal, duration,
+    sourceLanguage, speakingLanguage, outputScript = 'roman', isFinal, duration,
   } = input;
 
   const sttMode = 'transcribe';  // always native script; Roman is produced via transliterateToRoman
 
+  const INDIAN_LANGS_CHUNK = ['ta', 'hi', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or'];
+  const sttHintCode = speakingLanguage && INDIAN_LANGS_CHUNK.includes(speakingLanguage)
+    ? `${speakingLanguage}-IN`
+    : undefined;
+
   // Only run STT if the chunk has meaningful audio (very small blobs = silence / empty tail)
   const MIN_AUDIO_BYTES = 5_000;
   if (audioBuffer.byteLength >= MIN_AUDIO_BYTES) {
-    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode);
+    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode, sttHintCode);
 
+    const scriptLangChunk = detectLanguageFromScript(sttResult.transcript);
+    const sttLangChunk = sttResult.language_code && sttResult.language_code !== 'unknown'
+      ? sttResult.language_code
+      : null;
+    const speakingLangCodeChunk = sttHintCode ?? null;
     const detectedLang =
-      sourceLanguage && sourceLanguage !== 'auto'
-        ? sourceLanguage
-        : sttResult.language_code && sttResult.language_code !== 'unknown'
-          ? sttResult.language_code
-          : 'auto';
+      scriptLangChunk ??
+      ((sourceLanguage && sourceLanguage !== 'auto') ? sourceLanguage : null) ??
+      (sttLangChunk && sttLangChunk !== 'en-IN' ? sttLangChunk : null) ??
+      speakingLangCodeChunk ??
+      sttLangChunk ??
+      'auto';
 
     console.log(
       `[pipeline:chunk] ${fileName} — transcript length: ${sttResult.transcript?.length}`,
@@ -271,6 +304,17 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
             speaker: null,
           }));
 
+    // Deduplicate segments before insertion (same logic as processAudioForMeeting)
+    const seenChunk: Array<{ text: string; startSeconds: number }> = [];
+    const dedupedChunk = rawSegments.filter((seg) => {
+      const norm = seg.text.trim().toLowerCase();
+      const isDuplicate = seenChunk.some(
+        (s) => s.text === norm && Math.abs(s.startSeconds - seg.startSeconds) <= 2
+      );
+      if (!isDuplicate) seenChunk.push({ text: norm, startSeconds: seg.startSeconds });
+      return !isDuplicate;
+    });
+
     // Determine index offset — continue numbering from last inserted segment
     const idxRow = await queryOne<{ max_index: number }>(
       `SELECT COALESCE(MAX(segment_index), -1) AS max_index FROM transcripts WHERE meeting_id = $1`,
@@ -279,8 +323,8 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
     const indexOffset = (idxRow?.max_index ?? -1) + 1;
 
     // Translate + transliterate each segment in parallel (roman mode), or just translate (native)
-    for (let i = 0; i < rawSegments.length; i++) {
-      const seg = rawSegments[i];
+    for (let i = 0; i < dedupedChunk.length; i++) {
+      const seg = dedupedChunk[i];
       let en: string;
       let storedText: string;
 
@@ -297,7 +341,8 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       await query(
         `INSERT INTO transcripts
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (meeting_id, segment_index) DO NOTHING`,
         [meetingId, indexOffset + i, seg.startSeconds, storedText, en, seg.speaker]
       );
     }

@@ -234,3 +234,11 @@ ALTER TABLE meetings ADD COLUMN IF NOT EXISTS speaker_labels JSONB DEFAULT '{}';
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS share_token UUID;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_share_token ON meetings(share_token);
+
+-- ── Sprint 8 additions — Auto language detection + duplicate segment prevention ─
+
+-- Enforce uniqueness so concurrent pipeline calls cannot insert duplicate segments.
+-- ON CONFLICT (meeting_id, segment_index) DO NOTHING in the pipeline INSERT guards
+-- against race conditions without needing application-level locking.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transcripts_unique_segment
+  ON transcripts(meeting_id, segment_index);

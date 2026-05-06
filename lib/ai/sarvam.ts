@@ -425,6 +425,58 @@ export async function transliterateToRoman(
 }
 
 /**
+ * Detect the spoken language by inspecting Unicode script blocks in the transcribed text.
+ * Sarvam transcribes in 'transcribe' mode (native script), so Tamil speech → Tamil script
+ * characters, Hindi speech → Devanagari, etc. This is more reliable than Sarvam's
+ * language_code field, which often returns 'en-IN' for code-mixed Indian-English speech.
+ *
+ * Returns a Sarvam locale code (e.g. 'ta-IN') if an Indian script is dominant (>10% of
+ * non-whitespace chars), or null if the text is Latin-only / ambiguous.
+ */
+export function detectLanguageFromScript(text: string): string | null {
+  if (!text) return null;
+
+  const ranges: Array<{ lo: number; hi: number; lang: string }> = [
+    { lo: 0x0B80, hi: 0x0BFF, lang: 'ta-IN' },  // Tamil
+    { lo: 0x0900, hi: 0x097F, lang: 'hi-IN' },  // Devanagari (Hindi / Marathi)
+    { lo: 0x0C00, hi: 0x0C7F, lang: 'te-IN' },  // Telugu
+    { lo: 0x0C80, hi: 0x0CFF, lang: 'kn-IN' },  // Kannada
+    { lo: 0x0D00, hi: 0x0D7F, lang: 'ml-IN' },  // Malayalam
+    { lo: 0x0980, hi: 0x09FF, lang: 'bn-IN' },  // Bengali
+    { lo: 0x0A80, hi: 0x0AFF, lang: 'gu-IN' },  // Gujarati
+    { lo: 0x0A00, hi: 0x0A7F, lang: 'pa-IN' },  // Gurmukhi (Punjabi)
+    { lo: 0x0B00, hi: 0x0B7F, lang: 'or-IN' },  // Odia
+  ];
+
+  const counts: Record<string, number> = {};
+  let total = 0;
+
+  for (const char of text) {
+    if (/\s/.test(char)) continue;
+    total++;
+    const cp = char.codePointAt(0)!;
+    for (const { lo, hi, lang } of ranges) {
+      if (cp >= lo && cp <= hi) {
+        counts[lang] = (counts[lang] ?? 0) + 1;
+        break;
+      }
+    }
+  }
+
+  if (total === 0) return null;
+
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [lang, count] of Object.entries(counts)) {
+    if (count > bestCount) { best = lang; bestCount = count; }
+  }
+
+  // Require at least 10% of non-whitespace chars to be in the script to avoid
+  // false positives on text that has stray non-Latin characters.
+  return best && bestCount / total >= 0.10 ? best : null;
+}
+
+/**
  * Split a full transcript into segments for processing.
  * saaras:v3 returns a single transcript string; this splits it by sentence.
  */

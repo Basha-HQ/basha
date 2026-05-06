@@ -46,10 +46,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify meeting belongs to this user
-    const meeting = await queryOne<{ id: string; source_language: string; status: string }>(
-      `SELECT id, source_language, status FROM meetings WHERE id = $1 AND user_id = $2`,
-      [meetingId, userId]
-    );
+    const [meeting, userPrefs] = await Promise.all([
+      queryOne<{ id: string; source_language: string; status: string }>(
+        `SELECT id, source_language, status FROM meetings WHERE id = $1 AND user_id = $2`,
+        [meetingId, userId]
+      ),
+      queryOne<{ speaking_language: string }>(
+        `SELECT speaking_language FROM users WHERE id = $1`,
+        [userId]
+      ),
+    ]);
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
@@ -75,6 +81,7 @@ export async function POST(req: NextRequest) {
         fileName,
         chunkStartSeconds,
         sourceLanguage: meeting.source_language ?? 'auto',
+        speakingLanguage: userPrefs?.speaking_language ?? undefined,
         isFinal,
         duration,
       }).catch((err) => {
