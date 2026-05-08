@@ -12,6 +12,7 @@
 
 import { query, queryOne } from '@/lib/db';
 import { transcribeAudio, translateToEnglish, splitIntoSegments, transliterateToRoman, detectLanguageFromScript } from '@/lib/ai/sarvam';
+import { classifyLanguageWithLLM } from '@/lib/ai/language-detect';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 import {
@@ -20,6 +21,83 @@ import {
   windowsFromDiarized,
   resolveAndPersistSpeakerLabels,
 } from '@/lib/recording/speakerLabels';
+
+/**
+ * Roman invariant: original_text must contain only Latin/ASCII characters
+ * (plus punctuation, whitespace, digits, Latin Extended). Anything outside
+ * this set is treated as native script leaking through and triggers retry.
+ */
+const NON_ROMAN_RE = /[^\p{ASCII}\p{P}\p{Z}\p{N}À-ɏ]/u;
+
+/**
+ * Resolve the meeting's spoken language using a layered detection chain.
+ * Cached on `meetings.detected_language` after first resolution so subsequent
+ * chunks short-circuit without re-running the LLM tiebreaker.
+ */
+async function resolveLanguage(
+  meetingId: string,
+  transcript: string,
+  hints: { script: string | null; sourceLanguage: string | null; sttLang: string | null; speakingLang: string | null }
+): Promise<string | null> {
+  const cached = await queryOne<{ detected_language: string | null }>(
+    `SELECT detected_language FROM meetings WHERE id = $1`,
+    [meetingId]
+  );
+  if (cached?.detected_language) return cached.detected_language;
+
+  // Priority chain:
+  //   ① Unicode-script fingerprint (most reliable when STT returns native script)
+  //   ② Explicit user-set sourceLanguage (not 'auto')
+  //   ③ Sarvam-detected non-English language
+  //   ④ User's speaking_language hint
+  //   ⑤ LLM tiebreaker (handles transliterated code-mixed Hinglish/Tanglish)
+  //   ⑥ Sarvam-detected language even if 'en-IN'
+  let resolved: string | null =
+    hints.script ??
+    (hints.sourceLanguage && hints.sourceLanguage !== 'auto' ? hints.sourceLanguage : null) ??
+    (hints.sttLang && hints.sttLang !== 'en-IN' ? hints.sttLang : null) ??
+    hints.speakingLang ??
+    null;
+
+  if (!resolved && transcript) {
+    const llm = await classifyLanguageWithLLM(transcript);
+    if (llm && llm !== 'en') resolved = `${llm}-IN`;
+    else if (llm === 'en') resolved = 'en-IN';
+  }
+
+  resolved = resolved ?? hints.sttLang ?? null;
+
+  if (resolved) {
+    await query(`UPDATE meetings SET detected_language = $1 WHERE id = $2 AND detected_language IS NULL`, [resolved, meetingId]);
+  }
+  return resolved;
+}
+
+/**
+ * Enforce the roman invariant on a transliteration result. If the output still
+ * contains non-Roman script, retry with auto-lang and as a last resort fall
+ * back to the English translation rather than ship native script.
+ */
+async function enforceRomanInvariant(
+  segText: string,
+  storedText: string,
+  englishFallback: string,
+  detectedLang: string | null
+): Promise<string> {
+  if (!NON_ROMAN_RE.test(storedText)) return storedText;
+  console.error('[pipeline] Roman invariant violated — retrying with auto lang', {
+    lang: detectedLang,
+    sample: storedText.slice(0, 40),
+  });
+  try {
+    const retry = await transliterateToRoman(segText, 'auto');
+    if (!NON_ROMAN_RE.test(retry)) return retry;
+  } catch (err) {
+    console.error('[pipeline] Auto-lang transliteration retry failed:', err instanceof Error ? err.message : err);
+  }
+  console.error('[pipeline] Roman invariant unrecoverable — falling back to English translation');
+  return englishFallback;
+}
 
 export interface ChunkInput {
   meetingId: string;
@@ -75,14 +153,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       console.log('[pipeline] No diarized_entries — using sentence-split fallback');
     }
 
-    // Resolve language for translation.
-    // Priority:
-    //   1. Unicode script fingerprint of the transcribed text — most reliable; works
-    //      even when Sarvam returns 'en-IN' for code-mixed Indian-English recordings
-    //   2. Explicit sourceLanguage (user-set, not 'auto')
-    //   3. Sarvam-detected non-English language (trust clear detections)
-    //   4. User's speaking_language profile preference (fallback for Latin-script code-mixed)
-    //   5. Sarvam-detected language (last resort, even 'en-IN')
+    // Resolve language via layered chain (script → user hint → sarvam → LLM tiebreaker).
+    // The LLM tiebreaker handles code-mixed Hinglish/Tanglish that the regex script
+    // detector cannot. Result is cached on meetings.detected_language so subsequent
+    // chunks short-circuit. See resolveLanguage() at the top of this file.
     const scriptLang = detectLanguageFromScript(sttResult.transcript);
     const sttLang = sttResult.language_code && sttResult.language_code !== 'unknown'
       ? sttResult.language_code
@@ -90,13 +164,12 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     const speakingLangCode = speakingLanguage && INDIAN_LANGS.includes(speakingLanguage)
       ? `${speakingLanguage}-IN`
       : null;
-    const detectedLang: string | null =
-      scriptLang ??
-      ((sourceLanguage && sourceLanguage !== 'auto') ? sourceLanguage : null) ??
-      (sttLang && sttLang !== 'en-IN' ? sttLang : null) ??
-      speakingLangCode ??
-      sttLang ??
-      null;
+    const detectedLang = await resolveLanguage(meetingId, sttResult.transcript ?? '', {
+      script: scriptLang,
+      sourceLanguage,
+      sttLang,
+      speakingLang: speakingLangCode,
+    });
 
     console.log('[pipeline] Language resolution — script:', scriptLang, '| stt:', sttLang, '| speaking:', speakingLangCode, '→ final:', detectedLang);
 
@@ -164,10 +237,14 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       let storedText: string;
 
       if (outputScript === 'roman') {
-        [en, storedText] = await Promise.all([
-          translateToEnglish(seg.text, detectedLang),
-          transliterateToRoman(seg.text, detectedLang),
-        ]);
+        en = await translateToEnglish(seg.text, detectedLang);
+        try {
+          storedText = await transliterateToRoman(seg.text, detectedLang);
+        } catch (err) {
+          console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
+          storedText = en; // last-resort fallback rather than ship native script
+        }
+        storedText = await enforceRomanInvariant(seg.text, storedText, en, detectedLang);
       } else {
         en = await translateToEnglish(seg.text, detectedLang);
         storedText = seg.text;
@@ -268,13 +345,15 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       ? sttResult.language_code
       : null;
     const speakingLangCodeChunk = sttHintCode ?? null;
+    // Use cached detected_language if a prior chunk already resolved it; otherwise
+    // run the full chain (which may invoke the LLM tiebreaker on the first chunk).
     const detectedLang =
-      scriptLangChunk ??
-      ((sourceLanguage && sourceLanguage !== 'auto') ? sourceLanguage : null) ??
-      (sttLangChunk && sttLangChunk !== 'en-IN' ? sttLangChunk : null) ??
-      speakingLangCodeChunk ??
-      sttLangChunk ??
-      'auto';
+      (await resolveLanguage(meetingId, sttResult.transcript ?? '', {
+        script: scriptLangChunk,
+        sourceLanguage,
+        sttLang: sttLangChunk,
+        speakingLang: speakingLangCodeChunk,
+      })) ?? 'auto';
 
     console.log(
       `[pipeline:chunk] ${fileName} — transcript length: ${sttResult.transcript?.length}`,
@@ -329,10 +408,14 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       let storedText: string;
 
       if (outputScript === 'roman') {
-        [en, storedText] = await Promise.all([
-          translateToEnglish(seg.text, detectedLang),
-          transliterateToRoman(seg.text, detectedLang),
-        ]);
+        en = await translateToEnglish(seg.text, detectedLang);
+        try {
+          storedText = await transliterateToRoman(seg.text, detectedLang);
+        } catch (err) {
+          console.error('[pipeline:chunk] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
+          storedText = en;
+        }
+        storedText = await enforceRomanInvariant(seg.text, storedText, en, detectedLang);
       } else {
         en = await translateToEnglish(seg.text, detectedLang);
         storedText = seg.text;

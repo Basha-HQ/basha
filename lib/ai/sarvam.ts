@@ -395,10 +395,14 @@ export async function transliterateToRoman(
 
   const lang = sourceLanguage ? (languageMap[sourceLanguage] ?? sourceLanguage) : null;
 
-  if (!lang || lang === 'auto') {
-    console.warn('[sarvam] Transliteration skipped (unknown source language): returning original');
-    return text;
-  }
+  // When the language is unknown / 'auto', Sarvam's translate API still accepts
+  // source_language_code: 'auto' and detects from the input. Try that rather
+  // than silently returning native script (which would violate the roman
+  // invariant in the pipeline).
+  const sourceCode = !lang || lang === 'auto' ? 'auto' : lang;
+  // For target we mirror the source. With 'auto' source, Sarvam routes through
+  // its detection path and the response is romanized for the detected language.
+  const targetCode = sourceCode === 'auto' ? 'auto' : sourceCode;
 
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',
@@ -408,16 +412,19 @@ export async function transliterateToRoman(
     },
     body: JSON.stringify({
       input: text,
-      source_language_code: lang,
-      target_language_code: lang,  // same language = transliterate, not translate
+      source_language_code: sourceCode,
+      target_language_code: targetCode,  // same language = transliterate, not translate
       output_script: 'roman',
       model: 'mayura:v1',
     }),
   });
 
   if (!response.ok) {
-    console.warn(`[sarvam] Transliteration failed (${response.status}): returning original`);
-    return text;
+    const body = await response.text().catch(() => '');
+    // Throw rather than silently returning native script — the caller
+    // (pipeline.ts) decides on the fallback so the roman invariant is enforced
+    // at exactly one place.
+    throw new Error(`Sarvam transliteration failed: ${response.status} ${body}`);
   }
 
   const data: SarvamTranslationResponse = await response.json();

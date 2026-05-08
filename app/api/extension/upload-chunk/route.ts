@@ -93,9 +93,12 @@ export async function POST(req: NextRequest) {
     // Clean up chunk rows immediately (frees DB space)
     await query(`DELETE FROM upload_chunks WHERE meeting_id = $1`, [meetingId]);
 
-    // Fetch user preferences
-    const userPrefs = await queryOne<{ speaking_language: string }>(
-      `SELECT speaking_language FROM users WHERE id = $1`,
+    // Fetch user preferences. output_script defaults to 'roman' at the column
+    // level, but we read it explicitly so a user who picked 'fully-native'
+    // is honoured (and the default propagates rather than being silently
+    // dropped to the pipeline default).
+    const userPrefs = await queryOne<{ speaking_language: string; output_script: string }>(
+      `SELECT speaking_language, output_script FROM users WHERE id = $1`,
       [userId]
     );
 
@@ -120,6 +123,7 @@ export async function POST(req: NextRequest) {
         fileName,
         sourceLanguage: meeting.source_language ?? 'auto',
         speakingLanguage: userPrefs?.speaking_language ?? undefined,
+        outputScript: (userPrefs?.output_script as 'roman' | 'fully-native' | 'spoken-form-in-native' | undefined) ?? 'roman',
       }).catch((err) => {
         console.error(`[extension/upload-chunk] Pipeline error for meeting ${meetingId}:`, err);
       })

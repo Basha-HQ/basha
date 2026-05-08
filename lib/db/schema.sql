@@ -242,3 +242,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_share_token ON meetings(share_tok
 -- against race conditions without needing application-level locking.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_transcripts_unique_segment
   ON transcripts(meeting_id, segment_index);
+
+-- Cache resolved language per meeting so subsequent chunks (and the LLM
+-- tiebreaker path) skip re-detection. Populated by the pipeline once on the
+-- first chunk; null until then.
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS detected_language TEXT;

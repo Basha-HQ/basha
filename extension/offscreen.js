@@ -23,7 +23,6 @@ let activeMeetingId = null;
 let recordingStartTime = null;
 let audioContext = null;
 let uploadCredentials = null; // { token, origin }
-let tabPlayback = null; // Audio element for tab audio playback (bypasses Web Audio resampling)
 
 let chunkIndex = 0;          // monotonically increasing sequence number
 let flushInterval = null;     // setInterval handle for periodic flushing
@@ -100,14 +99,24 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     return;
   }
 
-  // 2. Capture microphone (the user's voice)
+  // 2. Capture microphone (the user's voice).
+  // - echoCancellation ON: required because tab audio is intentionally played
+  //   through speakers below, so we need AEC to prevent the speaker→mic feedback
+  //   loop from contaminating the recording.
+  // - noiseSuppression / autoGainControl OFF: these were the source of the
+  //   "muffled / underwater" recordings — Chrome's NS over-attenuates speech
+  //   formants and AGC pumps the gain on every utterance.
+  // - sampleRate 48000 + channelCount 1: matches the AudioContext below and
+  //   Opus's native rate, avoiding implicit resampling.
   let micStream = null;
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+        sampleRate: 48000,
       },
       video: false,
     });
@@ -115,32 +124,51 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
     // Microphone access denied — record tab audio only
   }
 
-  // 3. Mix streams via Web Audio API
-  audioContext = new AudioContext();
-  const destination = audioContext.createMediaStreamDestination();
-
-  // Play tab audio directly via Audio element — avoids Web Audio resampling artifacts
-  // that cause muffling when AudioContext sample rate differs from the stream's rate.
-  tabPlayback = new Audio();
-  tabPlayback.srcObject = tabStream;
-  tabPlayback.play().catch(() => {});
-
-  const tabSource = audioContext.createMediaStreamSource(tabStream);
-  tabSource.connect(destination); // for recording only
-
-  if (micStream) {
-    const micSource = audioContext.createMediaStreamSource(micStream);
-    micSource.connect(destination);
+  // 3. Build a single Web Audio graph that BOTH plays tab audio to speakers
+  //    (so the user can hear the meeting) AND mixes tab + mic into the recording.
+  //    Earlier versions used a separate `<audio>` element to bypass AudioContext
+  //    resampling, but that hack failed silently in MV3 offscreen documents under
+  //    autoplay policy — manifesting as "I can't hear participants". Locking the
+  //    AudioContext to 48 kHz eliminates the resampling artefacts that motivated
+  //    the hack in the first place.
+  audioContext = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+  try {
+    await audioContext.resume();
+  } catch (err) {
+    chrome.runtime.sendMessage({
+      type: 'RECORDING_ERROR',
+      error: `Audio context could not start: ${err.message}. Click the Basha extension icon and try again.`,
+    });
+    return;
   }
 
-  const recordingStream = destination.stream;
+  const mixBus = audioContext.createGain();
+  mixBus.gain.value = 1.0;
+  const recDest = audioContext.createMediaStreamDestination();
+  mixBus.connect(recDest);
 
-  // Prefer opus codec for best Sarvam STT compatibility and small file size
+  // Tab audio splits two ways: to speakers (so user hears the meeting) AND
+  // into the recording mix bus. Same source node, no double decode.
+  const tabSource = audioContext.createMediaStreamSource(tabStream);
+  tabSource.connect(audioContext.destination); // → speakers (fixes "can't hear participants")
+  tabSource.connect(mixBus);                    // → recording
+
+  if (micStream) {
+    // Mic goes only to the mix bus. Routing it to speakers would create an
+    // immediate hard feedback loop.
+    const micSource = audioContext.createMediaStreamSource(micStream);
+    micSource.connect(mixBus);
+  }
+
+  const recordingStream = recDest.stream;
+
+  // Prefer opus codec for best Sarvam STT compatibility and small file size.
+  // 96 kbps mono is transparent for speech and ~25% smaller than 128 kbps.
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : 'audio/webm';
 
-  mediaRecorder = new MediaRecorder(recordingStream, { mimeType, audioBitsPerSecond: 128_000 });
+  mediaRecorder = new MediaRecorder(recordingStream, { mimeType, audioBitsPerSecond: 96_000 });
 
   mediaRecorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
@@ -165,7 +193,6 @@ async function handleStartRecording({ streamId, meetingId, token, origin }) {
 
     // Stop all tracks to release microphone/tab audio
     allStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
-    if (tabPlayback) { tabPlayback.pause(); tabPlayback.srcObject = null; tabPlayback = null; }
     if (audioContext) {
       audioContext.close().catch(() => {});
       audioContext = null;
