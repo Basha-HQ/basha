@@ -287,44 +287,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
           );
         })()}
 
-        {/* Column headers */}
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: '1fr 1fr',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-          }}
-        >
-          <div
-            className="px-6 py-3 flex items-center gap-2"
-            style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}
-          >
-            <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              Original
-            </span>
-            {langBadge && (
-              <span
-                className="px-2 py-0.5 rounded-md text-xs font-semibold"
-                style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}
-              >
-                {langBadge}
-              </span>
-            )}
-          </div>
-          <div className="px-6 py-3 flex items-center gap-2">
-            <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              English
-            </span>
-            <span
-              className="px-2 py-0.5 rounded-md text-xs font-semibold"
-              style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)' }}
-            >
-              translated
-            </span>
-          </div>
-        </div>
-
-        {/* Segments */}
+        {/* Segments — Layout F: Soft Cards + Whisper */}
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <div
@@ -340,7 +303,10 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
             </p>
           </div>
         ) : (
-          <div className={audioPath ? 'overflow-y-auto max-h-[65vh]' : undefined}>
+          <div
+            className={audioPath ? 'overflow-y-auto max-h-[65vh]' : undefined}
+            style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}
+          >
             {filtered.map((seg, idx) => {
               const fullIdx = transcripts.findIndex((t) => t.id === seg.id);
               const displayTs = fullIdx >= 0 ? effectiveTimestamps[fullIdx] : (seg.timestamp_seconds ?? 0);
@@ -358,6 +324,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
                   isActive={seg.id === activeSegmentId}
                   isFlagged={flaggedSegmentIds?.includes(seg.id) ?? false}
                   onSeek={audioPath ? () => { seekAudioRef.current?.(displayTs); } : undefined}
+                  langBadge={langBadge ?? undefined}
                   domRef={(el) => {
                     if (fullIdx >= 0) segmentRefs.current[fullIdx] = el;
                   }}
@@ -400,10 +367,10 @@ function TranscriptRow({
   speakerMap,
   speakerLabels,
   onRenameSpeaker,
-  isLast,
   isActive,
   isFlagged,
   onSeek,
+  langBadge,
   domRef,
 }: {
   segment: TranscriptRow;
@@ -417,6 +384,7 @@ function TranscriptRow({
   isActive?: boolean;
   isFlagged?: boolean;
   onSeek?: () => void;
+  langBadge?: string;
   domRef?: (el: HTMLDivElement | null) => void;
 }) {
   const sc = segment.speaker ? getSpeakerColor(segment.speaker, speakerMap) : null;
@@ -439,171 +407,195 @@ function TranscriptRow({
   const label = segment.speaker ? speakerLabel(segment.speaker, speakerLabels) : null;
   const initial = segment.speaker ? speakerInitial(segment.speaker, speakerLabels) : null;
 
+  // Pure-English: original and english match (case-insensitive trim) → no whisper
+  const enText = segment.english_text?.trim() ?? '';
+  const ogText = segment.original_text?.trim() ?? '';
+  const isPureEnglish = !enText || enText.toLowerCase() === ogText.toLowerCase();
+
+  // Card background: slate wash for English, speaker-tinted gradient for non-English
+  const cardBackground = isPureEnglish
+    ? 'rgba(255,255,255,0.025)'
+    : sc
+      ? `linear-gradient(180deg, ${sc.bg} 0%, rgba(13,13,34,0) 90%)`
+      : 'rgba(255,255,255,0.025)';
+
   return (
     <div
       ref={domRef}
-      className="grid group transition-colors"
+      className="group transition-colors"
       style={{
-        gridTemplateColumns: '1fr 1fr',
-        borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)',
-        borderLeft: isActive ? '2px solid rgba(245,158,11,0.5)' : '2px solid transparent',
-        background: isActive ? 'rgba(245,158,11,0.06)' : 'transparent',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = isActive ? 'rgba(245,158,11,0.06)' : 'transparent';
+        padding: '14px 16px',
+        borderRadius: 14,
+        background: cardBackground,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        borderLeft: isActive ? '2px solid rgba(245,158,11,0.6)' : '2px solid transparent',
+        boxShadow: isActive ? '0 0 0 1px rgba(245,158,11,0.18)' : 'none',
       }}
     >
-      {/* Left cell — Original */}
-      <div
-        className="px-6 py-4 flex flex-col gap-2"
-        style={{ borderRight: '1px solid rgba(255,255,255,0.05)' }}
-      >
-        {/* Speaker row */}
-        {segment.speaker && sc && label && initial && (
-          <div className="flex items-center gap-2">
-            {/* Avatar */}
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
-              style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}
-            >
-              {initial}
-            </div>
-            {/* Name + timestamp */}
-            <div className="flex items-center gap-2 min-w-0">
-              {editing ? (
-                <input
-                  autoFocus
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={commitEdit}
-                  onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false); }}
-                  className="text-xs font-semibold outline-none rounded px-1"
-                  style={{ color: sc.color, background: sc.bg, border: `1px solid ${sc.color}`, minWidth: '60px', maxWidth: '120px' }}
-                />
-              ) : (
-                <button
-                  onClick={startEdit}
-                  title={onRenameSpeaker ? 'Click to rename speaker' : undefined}
-                  className={`text-xs font-semibold ${onRenameSpeaker ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} transition-opacity`}
-                  style={{ color: sc.color }}
-                >
-                  {label}
-                </button>
-              )}
-              {onSeek ? (
-                <button
-                  onClick={onSeek}
-                  className="text-xs font-mono tabular-nums hover:opacity-70 transition-opacity cursor-pointer"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}
-                  title="Seek to this point"
-                >
-                  {formatTimestamp(displayTimestamp)}
-                </button>
-              ) : (
-                <span className="text-xs font-mono tabular-nums" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  {formatTimestamp(displayTimestamp)}
-                </span>
-              )}
-            </div>
-            {/* Flag button */}
-            {onFlag && (
-              <button
-                onClick={onFlag}
-                className={`ml-auto transition-opacity shrink-0 p-1 rounded-md cursor-pointer ${
-                  isFlagged ? 'opacity-60' : 'opacity-0 group-hover:opacity-100'
-                }`}
-                style={{ color: isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)' }}
-                title={isFlagged ? 'Already flagged — click to update' : 'Flag incorrect transcript'}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#fb7185')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)')}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  fill={isFlagged ? 'currentColor' : 'none'}
-                  stroke="currentColor"
-                >
-                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-                  <line x1="4" y1="22" x2="4" y2="15"/>
-                </svg>
-              </button>
-            )}
+      {/* Header row — avatar + speaker + timestamp + (optional) language tag + flag */}
+      <div className="flex items-center" style={{ gap: 9 }}>
+        {/* Avatar 26px */}
+        {segment.speaker && sc ? (
+          <div
+            className="rounded-full flex items-center justify-center shrink-0 font-bold"
+            style={{
+              width: 26, height: 26, fontSize: 10,
+              background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+            }}
+          >
+            {initial}
+          </div>
+        ) : (
+          <div
+            className="rounded-full flex items-center justify-center shrink-0 font-bold"
+            style={{
+              width: 26, height: 26, fontSize: 10,
+              background: 'rgba(255,255,255,0.04)',
+              color: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            ?
           </div>
         )}
-        {/* No speaker: show avatar placeholder + timestamp inline */}
-        {!segment.speaker && (
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}
+
+        {/* Speaker name (editable) */}
+        {segment.speaker && sc && label ? (
+          editing ? (
+            <input
+              autoFocus
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false); }}
+              className="outline-none rounded px-1"
+              style={{
+                fontSize: 12.5, fontWeight: 700,
+                color: sc.color, background: sc.bg,
+                border: `1px solid ${sc.color}`, minWidth: 60, maxWidth: 140,
+              }}
+            />
+          ) : (
+            <button
+              onClick={startEdit}
+              title={onRenameSpeaker ? 'Click to rename speaker' : undefined}
+              className={`${onRenameSpeaker ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} transition-opacity`}
+              style={{ fontSize: 12.5, fontWeight: 700, color: sc.color }}
             >
-              ?
-            </div>
-            {onSeek ? (
-              <button
-                onClick={onSeek}
-                className="text-xs font-mono tabular-nums hover:opacity-70 transition-opacity cursor-pointer"
-                style={{ color: '#f59e0b' }}
-                title="Seek to this point"
-              >
-                {formatTimestamp(displayTimestamp)}
-              </button>
-            ) : (
-              <span className="text-xs font-mono tabular-nums" style={{ color: '#f59e0b' }}>
-                {formatTimestamp(displayTimestamp)}
-              </span>
-            )}
-          </div>
+              {label}
+            </button>
+          )
+        ) : null}
+
+        {/* Timestamp */}
+        {onSeek ? (
+          <button
+            onClick={onSeek}
+            className="hover:opacity-70 transition-opacity cursor-pointer tabular-nums"
+            style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.25)' }}
+            title="Seek to this point"
+          >
+            {formatTimestamp(displayTimestamp)}
+          </button>
+        ) : (
+          <span
+            className="tabular-nums"
+            style={{ fontSize: 10.5, fontFamily: 'monospace', color: 'rgba(255,255,255,0.25)' }}
+          >
+            {formatTimestamp(displayTimestamp)}
+          </span>
         )}
-        {/* Original text */}
-        <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
-          {highlightText(segment.original_text, highlight)}
-        </p>
+
+        {/* Language tag (only on non-English segments) — pushed to the right */}
+        {!isPureEnglish && langBadge && (
+          <span className="flex items-center" style={{ gap: 5, marginLeft: 'auto' }}>
+            <span
+              style={{
+                width: 5, height: 5, borderRadius: 99,
+                background: '#f59e0b', opacity: 0.7,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
+                color: 'rgba(245,158,11,0.7)',
+                textTransform: 'lowercase',
+              }}
+            >
+              {langBadge}
+            </span>
+          </span>
+        )}
+
+        {/* Flag button — pushed to right when no language tag, after when there is one */}
+        {onFlag && (
+          <button
+            onClick={onFlag}
+            className={`transition-opacity shrink-0 p-1 rounded-md cursor-pointer ${
+              isFlagged ? 'opacity-60' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            style={{
+              color: isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)',
+              marginLeft: !isPureEnglish && langBadge ? 4 : 'auto',
+            }}
+            title={isFlagged ? 'Already flagged — click to update' : 'Flag incorrect transcript'}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#fb7185')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)')}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              fill={isFlagged ? 'currentColor' : 'none'}
+              stroke="currentColor"
+            >
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+              <line x1="4" y1="22" x2="4" y2="15"/>
+            </svg>
+          </button>
+        )}
       </div>
 
-      {/* Right cell — English */}
-      <div className="px-6 py-4 flex flex-col gap-2">
-        {/* Mirror speaker row (no rename / no flag, just avatar + name + timestamp) */}
-        {segment.speaker && sc && label && initial && (
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
-              style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}
-            >
-              {initial}
-            </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-semibold" style={{ color: sc.color }}>{label}</span>
-              <span className="text-xs font-mono tabular-nums" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                {formatTimestamp(displayTimestamp)}
-              </span>
-            </div>
-          </div>
-        )}
-        {/* No speaker: mirror the placeholder row so text aligns with left column */}
-        {!segment.speaker && (
-          <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}
-            >
-              ?
-            </div>
-            <span className="text-xs font-mono tabular-nums" style={{ color: '#f59e0b' }}>
-              {formatTimestamp(displayTimestamp)}
-            </span>
-          </div>
-        )}
-        {/* English text */}
-        {segment.english_text ? (
-          <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.65)' }}>
+      {/* Original body */}
+      <p
+        style={{
+          fontSize: 13.5, lineHeight: 1.7,
+          color: 'rgba(255,255,255,0.88)',
+          paddingLeft: 35,
+          textWrap: 'pretty' as React.CSSProperties['textWrap'],
+        }}
+      >
+        {highlightText(segment.original_text, highlight)}
+      </p>
+
+      {/* Whisper EN block — only on non-English segments with a translation */}
+      {!isPureEnglish && segment.english_text && (
+        <div
+          style={{
+            paddingLeft: 35, paddingTop: 2,
+            display: 'flex', gap: 10, alignItems: 'flex-start',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: 'rgba(165,180,252,0.45)',
+              paddingTop: 3, flexShrink: 0,
+            }}
+          >
+            EN
+          </span>
+          <p
+            style={{
+              fontSize: 13, lineHeight: 1.65,
+              color: 'rgba(165,180,252,0.7)',
+              textWrap: 'pretty' as React.CSSProperties['textWrap'],
+            }}
+          >
             {highlightText(segment.english_text, highlight)}
           </p>
-        ) : (
-          <p className="text-sm italic" style={{ color: 'rgba(255,255,255,0.2)' }}>—</p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

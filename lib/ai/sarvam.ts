@@ -258,7 +258,78 @@ async function transcribeAudioBatch(
   return { transcript, language_code, diarized_entries };
 }
 
+// ── Sync STT + Translate (≤30 seconds) — Pipeline A ──────────────────────────
+
+/**
+ * Sarvam's `/speech-to-text-translate` sync endpoint. Transcribes audio AND
+ * translates to English in one call. Robust for code-mixed Indian audio:
+ * works without a language hint, and the response carries the detected
+ * `language_code` which the caller uses to drive Pipeline B (native-script STT).
+ */
+async function transcribeAndTranslateAudioSync(
+  apiKey: string,
+  audioBuffer: Buffer,
+  fileName: string,
+): Promise<SarvamSTTResponse> {
+  const formData = new FormData();
+  const blob = new Blob([audioBuffer.buffer as ArrayBuffer], { type: mimeTypeForFile(fileName) });
+  formData.append('file', blob, fileName);
+  formData.append('model', 'saaras:v3');
+  // NOTE: sync endpoint does NOT support with_diarization. Diarization is
+  // produced separately by Pipeline B (transcribeAudioBatch).
+
+  const response = await fetch(`${SARVAM_BASE_URL}/speech-to-text-translate`, {
+    method: 'POST',
+    headers: { 'api-subscription-key': apiKey },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Sarvam STT-translate failed: ${response.status} ${error}`);
+  }
+
+  return response.json();
+}
+
+// ── Batch STT + Translate (>30 seconds) — Pipeline A ─────────────────────────
+
+async function transcribeAndTranslateAudioBatch(
+  apiKey: string,
+  audioBuffer: Buffer,
+  fileName: string,
+): Promise<SarvamSTTResponse> {
+  // Same job pipeline as the regular batch STT, but mode='translate' tells
+  // Sarvam to emit English translations alongside the detected language code.
+  return transcribeAudioBatch(apiKey, audioBuffer, fileName, 'translate', undefined);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Pipeline A: transcribe + translate the audio in one Sarvam call.
+ * Returns English transcript + the detected source language code, which the
+ * caller feeds into Pipeline B as a hint to force native-script transcription.
+ */
+export async function transcribeAndTranslateAudio(
+  audioBuffer: Buffer,
+  fileName: string,
+): Promise<SarvamSTTResponse> {
+  const apiKey = process.env.SARVAM_AI_API_KEY;
+  if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
+
+  try {
+    console.log(`[sarvam] Pipeline A (STT-translate sync) for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB)`);
+    return await transcribeAndTranslateAudioSync(apiKey, audioBuffer, fileName);
+  } catch (syncErr) {
+    const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+    if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size')) {
+      console.log(`[sarvam] Pipeline A sync rejected, falling back to batch: ${msg}`);
+      return transcribeAndTranslateAudioBatch(apiKey, audioBuffer, fileName);
+    }
+    throw syncErr;
+  }
+}
 
 /**
  * Transcribe audio using Sarvam AI.

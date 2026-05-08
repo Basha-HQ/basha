@@ -11,8 +11,13 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { transcribeAudio, translateToEnglish, splitIntoSegments, transliterateToRoman, detectLanguageFromScript } from '@/lib/ai/sarvam';
-import { classifyLanguageWithLLM } from '@/lib/ai/language-detect';
+import {
+  transcribeAudio,
+  transcribeAndTranslateAudio,
+  translateToEnglish,
+  splitIntoSegments,
+  transliterateToRoman,
+} from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 import {
@@ -30,47 +35,26 @@ import {
 const NON_ROMAN_RE = /[^\p{ASCII}\p{P}\p{Z}\p{N}À-ɏ]/u;
 
 /**
- * Resolve the meeting's spoken language using a layered detection chain.
- * Cached on `meetings.detected_language` after first resolution so subsequent
- * chunks short-circuit without re-running the LLM tiebreaker.
+ * Cache the language resolved by Pipeline A so analytics + UI can read it.
+ * Pipeline A is the single source of truth for spoken language — no fallback
+ * chain, no browser locale, no sticky preferences (each meeting starts fresh).
  */
-async function resolveLanguage(
-  meetingId: string,
-  transcript: string,
-  hints: { script: string | null; sourceLanguage: string | null; sttLang: string | null; speakingLang: string | null }
-): Promise<string | null> {
-  const cached = await queryOne<{ detected_language: string | null }>(
-    `SELECT detected_language FROM meetings WHERE id = $1`,
-    [meetingId]
+async function persistDetectedLanguage(meetingId: string, languageCode: string | null): Promise<void> {
+  if (!languageCode) return;
+  await query(
+    `UPDATE meetings SET detected_language = $1 WHERE id = $2 AND detected_language IS NULL`,
+    [languageCode, meetingId]
   );
-  if (cached?.detected_language) return cached.detected_language;
+}
 
-  // Priority chain:
-  //   ① Unicode-script fingerprint (most reliable when STT returns native script)
-  //   ② Explicit user-set sourceLanguage (not 'auto')
-  //   ③ Sarvam-detected non-English language
-  //   ④ User's speaking_language hint
-  //   ⑤ LLM tiebreaker (handles transliterated code-mixed Hinglish/Tanglish)
-  //   ⑥ Sarvam-detected language even if 'en-IN'
-  let resolved: string | null =
-    hints.script ??
-    (hints.sourceLanguage && hints.sourceLanguage !== 'auto' ? hints.sourceLanguage : null) ??
-    (hints.sttLang && hints.sttLang !== 'en-IN' ? hints.sttLang : null) ??
-    hints.speakingLang ??
-    null;
-
-  if (!resolved && transcript) {
-    const llm = await classifyLanguageWithLLM(transcript);
-    if (llm && llm !== 'en') resolved = `${llm}-IN`;
-    else if (llm === 'en') resolved = 'en-IN';
-  }
-
-  resolved = resolved ?? hints.sttLang ?? null;
-
-  if (resolved) {
-    await query(`UPDATE meetings SET detected_language = $1 WHERE id = $2 AND detected_language IS NULL`, [resolved, meetingId]);
-  }
-  return resolved;
+/**
+ * Pull a Sarvam diarized entry's start time, normalising the various keys
+ * Sarvam returns across endpoints/versions. Returns whole seconds.
+ */
+function diarizedStartSec(e: { start?: number } & Record<string, unknown>): number {
+  const startRaw = e.start ?? e['start_time_seconds'] ?? e['start_time'] ?? e['start_ms'];
+  if (typeof startRaw !== 'number' || !Number.isFinite(startRaw)) return 0;
+  return startRaw > 3600 ? Math.round(startRaw / 1000) : Math.round(startRaw);
 }
 
 /**
@@ -121,7 +105,7 @@ export interface ProcessingInput {
 }
 
 export async function processAudioForMeeting(input: ProcessingInput): Promise<void> {
-  const { meetingId, audioBuffer, fileName, sourceLanguage, outputScript = 'roman', speakingLanguage } = input;
+  const { meetingId, audioBuffer, fileName, outputScript = 'roman' } = input;
 
   await query(
     `UPDATE meetings SET status = 'processing' WHERE id = $1`,
@@ -129,93 +113,62 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
   );
 
   try {
-    // 1. Transcribe with Sarvam AI (WebM/Opus, MP4, WAV, MP3 all supported)
-    // Always use 'transcribe' mode (native script) so we can run transliteration
-    // and translation in parallel from the same source text.
-    // Roman output is produced separately via transliterateToRoman.
-    const sttMode = 'transcribe';
-    // Pass the user's speaking language as a hint so Sarvam returns native script
-    // even for code-mixed Tamil-English recordings (without this it auto-detects en-IN).
-    const INDIAN_LANGS = ['ta', 'hi', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or'];
-    const sttLanguageCode = speakingLanguage && INDIAN_LANGS.includes(speakingLanguage)
-      ? `${speakingLanguage}-IN`
-      : undefined;
-    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode, sttLanguageCode);
+    // ── Pipeline A — STT-translate ────────────────────────────────────────────
+    // Sarvam's /speech-to-text-translate auto-detects the spoken language from
+    // the audio and returns an English translation. The detected `language_code`
+    // becomes the canonical hint for Pipeline B. No browser locale, no sticky
+    // preference — each meeting is detected fresh from the audio.
+    const pipelineA = await transcribeAndTranslateAudio(audioBuffer, fileName);
+    const detectedLang =
+      pipelineA.language_code && pipelineA.language_code !== 'unknown'
+        ? pipelineA.language_code
+        : null;
+    console.log('[pipeline] Pipeline A — language:', detectedLang,
+      '| english length:', pipelineA.transcript?.length,
+      '| diarized:', pipelineA.diarized_entries?.length ?? 0);
 
-    console.log('[pipeline] STT result — transcript length:', sttResult.transcript?.length,
-      '| language:', sttResult.language_code,
-      '| diarized entries:', sttResult.diarized_entries?.length ?? 0);
-    console.log('[pipeline] Transcript preview:', JSON.stringify((sttResult.transcript ?? '').slice(0, 300)));
+    await persistDetectedLanguage(meetingId, detectedLang);
 
-    if (sttResult.diarized_entries?.length) {
-      console.log('[pipeline] Sarvam diarized entry[0]:', JSON.stringify(sttResult.diarized_entries[0]));
-    } else {
-      console.log('[pipeline] No diarized_entries — using sentence-split fallback');
+    // ── Pipeline B — STT (transcribe) with hint from A ───────────────────────
+    // For non-English: rerun STT with the detected hint to force native-script
+    // output (Sarvam without a hint can return English for code-mixed audio).
+    // For pure English: short-circuit; Pipeline A's English serves both columns.
+    const isPureEnglish = detectedLang === 'en-IN' || !detectedLang;
+    const pipelineB = isPureEnglish
+      ? pipelineA
+      : await transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang);
+    if (!isPureEnglish) {
+      console.log('[pipeline] Pipeline B — native transcript length:', pipelineB.transcript?.length,
+        '| diarized:', pipelineB.diarized_entries?.length ?? 0);
     }
 
-    // Resolve language via layered chain (script → user hint → sarvam → LLM tiebreaker).
-    // The LLM tiebreaker handles code-mixed Hinglish/Tanglish that the regex script
-    // detector cannot. Result is cached on meetings.detected_language so subsequent
-    // chunks short-circuit. See resolveLanguage() at the top of this file.
-    const scriptLang = detectLanguageFromScript(sttResult.transcript);
-    const sttLang = sttResult.language_code && sttResult.language_code !== 'unknown'
-      ? sttResult.language_code
-      : null;
-    const speakingLangCode = speakingLanguage && INDIAN_LANGS.includes(speakingLanguage)
-      ? `${speakingLanguage}-IN`
-      : null;
-    const detectedLang = await resolveLanguage(meetingId, sttResult.transcript ?? '', {
-      script: scriptLang,
-      sourceLanguage,
-      sttLang,
-      speakingLang: speakingLangCode,
-    });
-
-    console.log('[pipeline] Language resolution — script:', scriptLang, '| stt:', sttLang, '| speaking:', speakingLangCode, '→ final:', detectedLang);
-
-    // 1b. Resolve real speaker names for Sarvam's SPEAKER_XX IDs. See
-    // lib/recording/speakerLabels.ts for the 3-tier fallback strategy.
-    if (sttResult.diarized_entries?.length) {
+    // Speaker label resolution from B (canonical diarization timeline)
+    if (pipelineB.diarized_entries?.length) {
       await resolveAndPersistSpeakerLabels(
         meetingId,
-        actualSpeakerIdsFromDiarized(sttResult.diarized_entries),
-        windowsFromDiarized(sttResult.diarized_entries)
+        actualSpeakerIdsFromDiarized(pipelineB.diarized_entries),
+        windowsFromDiarized(pipelineB.diarized_entries)
       );
     }
 
-    // 2. Build segments — prefer diarized (real timestamps + speaker) over sentence split
-    const segments: Array<{ text: string; startSeconds: number; speaker: string | null }> =
-      sttResult.diarized_entries?.length
-        ? sttResult.diarized_entries.map((e) => {
+    // Build canonical segments from Pipeline B (or A if pure English)
+    const rawBSegments: Array<{ text: string; startSeconds: number; speaker: string | null }> =
+      pipelineB.diarized_entries?.length
+        ? pipelineB.diarized_entries.map((e) => {
             const raw = e as unknown as Record<string, unknown>;
-            const startRaw =
-              e.start ??
-              raw['start_time_seconds'] ??
-              raw['start_time'] ??
-              raw['start_ms'];
-            const startSec =
-              typeof startRaw === 'number' && Number.isFinite(startRaw)
-                ? startRaw > 3600 ? Math.round(startRaw / 1000) : Math.round(startRaw)
-                : 0;
             const speaker = normalizeSpeaker(e.speaker ?? raw['speaker_id']);
             return {
-              text: e.transcript,
-              startSeconds: startSec,
+              text: e.transcript ?? '',
+              startSeconds: diarizedStartSec({ ...e, ...raw }),
               speaker,
             };
           })
-        : splitIntoSegments(sttResult.transcript, 0).map((s) => ({ ...s, speaker: null }));
+        : splitIntoSegments(pipelineB.transcript ?? '', 0).map((s) => ({ ...s, speaker: null }));
 
-    console.log('[pipeline] Segments to process:', segments.length);
-    if (segments.length > 0) {
-      console.log('[pipeline] First segment:', JSON.stringify(segments[0]));
-    }
-
-    // 3. Deduplicate segments — Sarvam diarization can assign the same speech to multiple
-    // speakers simultaneously. Drop any segment whose text+timestamp duplicates a prior one
-    // within a 2-second window (keep the first occurrence).
+    // Deduplicate segments — Sarvam diarization sometimes assigns the same
+    // utterance to multiple speakers. Drop near-identical (text + timestamp).
     const seen: Array<{ text: string; startSeconds: number }> = [];
-    const dedupedSegments = segments.filter((seg) => {
+    const segments = rawBSegments.filter((seg) => {
       const norm = seg.text.trim().toLowerCase();
       const isDuplicate = seen.some(
         (s) => s.text === norm && Math.abs(s.startSeconds - seg.startSeconds) <= 2
@@ -223,40 +176,71 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       if (!isDuplicate) seen.push({ text: norm, startSeconds: seg.startSeconds });
       return !isDuplicate;
     });
+    console.log(`[pipeline] Segments after dedup: ${segments.length} (was ${rawBSegments.length})`);
 
-    console.log(`[pipeline] Segments after dedup: ${dedupedSegments.length} (was ${segments.length})`);
+    // Build a timestamp index of Pipeline A entries so we can match each
+    // B-segment to A's English with a ±2s tolerance window. Used only for
+    // non-English meetings; pure English just reuses A's text directly.
+    const aIndex: Array<{ sec: number; text: string }> = !isPureEnglish && pipelineA.diarized_entries?.length
+      ? pipelineA.diarized_entries.map((e) => {
+          const raw = e as unknown as Record<string, unknown>;
+          return { sec: diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
+        })
+      : [];
 
-    // 4. Translate + transliterate each segment, then insert transcript rows.
-    // For roman outputScript: run translation (native → English) and transliteration
-    // (native → Roman) in parallel from the same native-script STT output.
-    // For native outputScript: just translate to English, store native script as-is.
+    function findEnglishForSegment(startSec: number, fallbackText: string): { english: string; matched: boolean } {
+      if (isPureEnglish) return { english: fallbackText, matched: true };
+      let best: { sec: number; text: string; dist: number } | null = null;
+      for (const a of aIndex) {
+        const dist = Math.abs(a.sec - startSec);
+        if (dist <= 2 && (!best || dist < best.dist)) best = { ...a, dist };
+      }
+      return best ? { english: best.text, matched: true } : { english: '', matched: false };
+    }
+
+    // ── Per-segment processing ───────────────────────────────────────────────
+    // For non-English roman output: transliterate B's native text, find
+    // matching English from Pipeline A's diarized entries, fall back to a
+    // per-segment text translation only when no A-match falls in tolerance.
     const englishSegments: string[] = [];
-    for (let i = 0; i < dedupedSegments.length; i++) {
-      const seg = dedupedSegments[i];
-      let en: string;
-      let storedText: string;
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      let original: string;
+      let english: string;
 
-      if (outputScript === 'roman') {
-        en = await translateToEnglish(seg.text, detectedLang);
+      if (isPureEnglish) {
+        original = seg.text;
+        english = seg.text;
+      } else if (outputScript === 'roman') {
+        // English from Pipeline A (preferred) or fallback to text translation
+        const match = findEnglishForSegment(seg.startSeconds, seg.text);
+        english = match.matched
+          ? match.english
+          : await translateToEnglish(seg.text, detectedLang);
+
         try {
-          storedText = await transliterateToRoman(seg.text, detectedLang);
+          original = await transliterateToRoman(seg.text, detectedLang);
         } catch (err) {
           console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
-          storedText = en; // last-resort fallback rather than ship native script
+          original = english;
         }
-        storedText = await enforceRomanInvariant(seg.text, storedText, en, detectedLang);
+        original = await enforceRomanInvariant(seg.text, original, english, detectedLang);
       } else {
-        en = await translateToEnglish(seg.text, detectedLang);
-        storedText = seg.text;
+        // Non-roman output script — keep native, still get English from A
+        const match = findEnglishForSegment(seg.startSeconds, seg.text);
+        english = match.matched
+          ? match.english
+          : await translateToEnglish(seg.text, detectedLang);
+        original = seg.text;
       }
-      englishSegments.push(en);
+      englishSegments.push(english);
 
       await query(
         `INSERT INTO transcripts
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (meeting_id, segment_index) DO NOTHING`,
-        [meetingId, i, seg.startSeconds, storedText, en, seg.speaker]
+        [meetingId, i, seg.startSeconds, original, english, seg.speaker]
       );
     }
 
@@ -325,65 +309,48 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 export async function processAudioChunk(input: ChunkInput): Promise<void> {
   const {
     meetingId, audioBuffer, fileName, chunkStartSeconds,
-    sourceLanguage, speakingLanguage, outputScript = 'roman', isFinal, duration,
+    outputScript = 'roman', isFinal, duration,
   } = input;
-
-  const sttMode = 'transcribe';  // always native script; Roman is produced via transliterateToRoman
-
-  const INDIAN_LANGS_CHUNK = ['ta', 'hi', 'te', 'kn', 'ml', 'mr', 'bn', 'gu', 'pa', 'or'];
-  const sttHintCode = speakingLanguage && INDIAN_LANGS_CHUNK.includes(speakingLanguage)
-    ? `${speakingLanguage}-IN`
-    : undefined;
 
   // Only run STT if the chunk has meaningful audio (very small blobs = silence / empty tail)
   const MIN_AUDIO_BYTES = 5_000;
   if (audioBuffer.byteLength >= MIN_AUDIO_BYTES) {
-    const sttResult = await transcribeAudio(audioBuffer, fileName, sttMode, sttHintCode);
-
-    const scriptLangChunk = detectLanguageFromScript(sttResult.transcript);
-    const sttLangChunk = sttResult.language_code && sttResult.language_code !== 'unknown'
-      ? sttResult.language_code
-      : null;
-    const speakingLangCodeChunk = sttHintCode ?? null;
-    // Use cached detected_language if a prior chunk already resolved it; otherwise
-    // run the full chain (which may invoke the LLM tiebreaker on the first chunk).
+    // ── Pipeline A — STT-translate (auto-detects language from audio) ──────
+    const pipelineA = await transcribeAndTranslateAudio(audioBuffer, fileName);
     const detectedLang =
-      (await resolveLanguage(meetingId, sttResult.transcript ?? '', {
-        script: scriptLangChunk,
-        sourceLanguage,
-        sttLang: sttLangChunk,
-        speakingLang: speakingLangCodeChunk,
-      })) ?? 'auto';
+      pipelineA.language_code && pipelineA.language_code !== 'unknown'
+        ? pipelineA.language_code
+        : null;
+    await persistDetectedLanguage(meetingId, detectedLang);
 
     console.log(
-      `[pipeline:chunk] ${fileName} — transcript length: ${sttResult.transcript?.length}`,
-      `| sttMode: ${sttMode}`,
-      `| stt language_code: ${sttResult.language_code}`,
-      `| detectedLang: ${detectedLang}`,
-      `| diarized: ${sttResult.diarized_entries?.length ?? 0}`,
+      `[pipeline:chunk] ${fileName} — A english len: ${pipelineA.transcript?.length}`,
+      `| detected: ${detectedLang}`,
       `| chunkStart: ${chunkStartSeconds}s`
     );
 
-    // Build segments, offsetting timestamps by chunkStartSeconds
+    // ── Pipeline B — STT (transcribe) with hint from A; skipped for pure English ──
+    const isPureEnglish = detectedLang === 'en-IN' || !detectedLang;
+    const pipelineB = isPureEnglish
+      ? pipelineA
+      : await transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang);
+
+    // Build segments from B (canonical), offsetting by chunkStartSeconds
     const rawSegments: Array<{ text: string; startSeconds: number; speaker: string | null }> =
-      sttResult.diarized_entries?.length
-        ? sttResult.diarized_entries.map((e) => {
+      pipelineB.diarized_entries?.length
+        ? pipelineB.diarized_entries.map((e) => {
             const raw = e as unknown as Record<string, unknown>;
-            const startRaw = e.start ?? raw['start_time_seconds'] ?? raw['start_time'] ?? raw['start_ms'];
-            const localSec =
-              typeof startRaw === 'number' && Number.isFinite(startRaw)
-                ? startRaw > 3600 ? Math.round(startRaw / 1000) : Math.round(startRaw)
-                : 0;
+            const localSec = diarizedStartSec({ ...e, ...raw });
             const speaker = normalizeSpeaker(e.speaker ?? raw['speaker_id']);
-            return { text: e.transcript, startSeconds: chunkStartSeconds + localSec, speaker };
+            return { text: e.transcript ?? '', startSeconds: chunkStartSeconds + localSec, speaker };
           })
-        : splitIntoSegments(sttResult.transcript, 30).map((s) => ({
+        : splitIntoSegments(pipelineB.transcript ?? '', 30).map((s) => ({
             ...s,
             startSeconds: chunkStartSeconds + s.startSeconds,
             speaker: null,
           }));
 
-    // Deduplicate segments before insertion (same logic as processAudioForMeeting)
+    // Deduplicate near-identical segments (same text within 2s)
     const seenChunk: Array<{ text: string; startSeconds: number }> = [];
     const dedupedChunk = rawSegments.filter((seg) => {
       const norm = seg.text.trim().toLowerCase();
@@ -394,31 +361,53 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       return !isDuplicate;
     });
 
-    // Determine index offset — continue numbering from last inserted segment
+    // Index Pipeline A's diarized entries for ±2s timestamp matching
+    const aIndex: Array<{ sec: number; text: string }> = !isPureEnglish && pipelineA.diarized_entries?.length
+      ? pipelineA.diarized_entries.map((e) => {
+          const raw = e as unknown as Record<string, unknown>;
+          return { sec: chunkStartSeconds + diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
+        })
+      : [];
+
+    // Continue numbering from the last inserted segment for this meeting
     const idxRow = await queryOne<{ max_index: number }>(
       `SELECT COALESCE(MAX(segment_index), -1) AS max_index FROM transcripts WHERE meeting_id = $1`,
       [meetingId]
     );
     const indexOffset = (idxRow?.max_index ?? -1) + 1;
 
-    // Translate + transliterate each segment in parallel (roman mode), or just translate (native)
     for (let i = 0; i < dedupedChunk.length; i++) {
       const seg = dedupedChunk[i];
-      let en: string;
-      let storedText: string;
+      let original: string;
+      let english: string;
 
-      if (outputScript === 'roman') {
-        en = await translateToEnglish(seg.text, detectedLang);
+      if (isPureEnglish) {
+        original = seg.text;
+        english = seg.text;
+      } else if (outputScript === 'roman') {
+        // English: closest A-segment by timestamp; fall back to text translation
+        let aMatch: { sec: number; text: string; dist: number } | null = null;
+        for (const a of aIndex) {
+          const dist = Math.abs(a.sec - seg.startSeconds);
+          if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
+        }
+        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, detectedLang);
+
         try {
-          storedText = await transliterateToRoman(seg.text, detectedLang);
+          original = await transliterateToRoman(seg.text, detectedLang);
         } catch (err) {
           console.error('[pipeline:chunk] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
-          storedText = en;
+          original = english;
         }
-        storedText = await enforceRomanInvariant(seg.text, storedText, en, detectedLang);
+        original = await enforceRomanInvariant(seg.text, original, english, detectedLang);
       } else {
-        en = await translateToEnglish(seg.text, detectedLang);
-        storedText = seg.text;
+        let aMatch: { sec: number; text: string; dist: number } | null = null;
+        for (const a of aIndex) {
+          const dist = Math.abs(a.sec - seg.startSeconds);
+          if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
+        }
+        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, detectedLang);
+        original = seg.text;
       }
 
       await query(
@@ -426,16 +415,18 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
            (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (meeting_id, segment_index) DO NOTHING`,
-        [meetingId, indexOffset + i, seg.startSeconds, storedText, en, seg.speaker]
+        [meetingId, indexOffset + i, seg.startSeconds, original, english, seg.speaker]
       );
     }
 
-    // Persist detected language if not yet set
-    await query(
-      `UPDATE meetings SET source_language = $1
-       WHERE id = $2 AND (source_language IS NULL OR source_language = 'auto')`,
-      [detectedLang, meetingId]
-    );
+    // Persist source_language (for downstream UI / language badge) if not set
+    if (detectedLang) {
+      await query(
+        `UPDATE meetings SET source_language = $1
+         WHERE id = $2 AND (source_language IS NULL OR source_language = 'auto')`,
+        [detectedLang, meetingId]
+      );
+    }
   } else {
     console.log(`[pipeline:chunk] ${fileName} — skipped STT (too small: ${audioBuffer.byteLength} bytes)`);
   }

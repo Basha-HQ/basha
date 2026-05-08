@@ -176,7 +176,36 @@ async function startRecording({ tabId, sourceLanguage, meetingUrl }) {
 
   await ensureOffscreenDocument();
 
-  // Scrape participant names and RTC active-speaker timeline from the meeting tab DOM
+  // ── Build canonical roster ──────────────────────────────────────────────
+  // Layer 1: user's own display name (always present from OAuth profile)
+  // Layer 2: Calendar attendees (only when meeting is scheduled — non-fatal if not)
+  // The roster is sent into the content script BEFORE participant scraping so
+  // the People-pane scrape can reconcile DOM names against canonical spelling.
+  let canonicalRoster = [];
+  try {
+    const r = await apiGet(`/api/extension/roster?meetingUrl=${encodeURIComponent(meetingUrl ?? '')}`);
+    if (r?.selfName) canonicalRoster.push(r.selfName);
+    if (Array.isArray(r?.calendarAttendees)) {
+      for (const a of r.calendarAttendees) {
+        if (a && !canonicalRoster.includes(a)) canonicalRoster.push(a);
+      }
+    }
+  } catch {
+    // Roster fetch is best-effort. Even with zero calendar attendees the
+    // People-pane scrape downstream produces a usable list.
+  }
+
+  if (canonicalRoster.length > 0) {
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: 'BASHA_SET_ROSTER', roster: canonicalRoster });
+    } catch {
+      // content-script may not be loaded on non-Meet pages — non-fatal
+    }
+  }
+
+  // Scrape participant names + RTC timeline. The content script does a deep
+  // scrape (auto-opens the People pane) and reconciles against the canonical
+  // roster set above.
   let participantNames = [];
   let activeSpeakerTimeline = [];
   try {

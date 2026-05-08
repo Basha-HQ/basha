@@ -85,7 +85,7 @@ window.addEventListener('message', (event) => {
       while (cur && cur !== document.body) {
         const nameChip = cur.querySelector('.ZY8hPc.iPFm3e');
         if (nameChip) {
-          activeName = cleanName(nameChip.querySelector('span')?.textContent?.trim() ?? nameChip.textContent?.trim());
+          activeName = extractCleanName(nameChip);
           if (activeName) break;
         }
         cur = cur.parentElement;
@@ -183,6 +183,70 @@ const INSTRUCTION_WORDS = new Set([
 ]);
 
 /**
+ * Detect and collapse a doubled name. Three patterns:
+ *   "Alice Alice"       → "Alice"  (case-insensitive halves match, separated by space)
+ *   "AliceAlice"        → "Alice"  (zero-space repeat — half-strings match case-insensitively)
+ *   "Alice​Alice"  → "Alice"  (zero-width or NBSP separator)
+ * Single-word names ("Madonna") and distinct two-word names ("Alice Bob") pass through.
+ *
+ * Why: Google Meet renders the name chip with multiple stacked spans for animation /
+ * accessibility, and `el.textContent` concatenates all of them without separators.
+ * This is a belt-and-braces guard regardless of which extraction path produced the string.
+ */
+function dedupeName(s) {
+  if (!s) return s;
+  const trimmed = s.replace(/[​‌‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  if (!trimmed) return trimmed;
+
+  // Whole-string repeat: "X X" / "XX" — first half equals second half (case-insensitive)
+  const len = trimmed.length;
+  if (len % 2 === 0) {
+    const a = trimmed.slice(0, len / 2);
+    const b = trimmed.slice(len / 2);
+    if (a.toLowerCase() === b.toLowerCase()) return a;
+  }
+  // " X X" with a space at the boundary (odd length) — split at midpoint space
+  if (len > 3 && (len - 1) % 2 === 0) {
+    const mid = (len - 1) / 2;
+    if (trimmed.charAt(mid) === ' ') {
+      const a = trimmed.slice(0, mid);
+      const b = trimmed.slice(mid + 1);
+      if (a.toLowerCase() === b.toLowerCase()) return a;
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Return the FIRST non-empty trimmed text node found inside `el`, depth-first.
+ * Avoids `el.textContent` (which concatenates ALL descendant text) — that's
+ * what produced the "SaisiddharthSaisiddharth" doubling when Meet renders the
+ * name chip with stacked duplicate spans.
+ */
+function firstTextNode(el) {
+  if (!el) return '';
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    const t = node.textContent && node.textContent.trim();
+    if (t) return t;
+  }
+  return '';
+}
+
+/**
+ * Extract the participant name from a name-chip-like element. Prefers the first
+ * inner <span>'s first text node; falls back to the element's first text node.
+ * Always passes the result through dedupeName + cleanName.
+ */
+function extractCleanName(el) {
+  if (!el) return null;
+  const span = el.querySelector('span');
+  const raw = (span && firstTextNode(span)) || firstTextNode(el);
+  return cleanName(dedupeName(raw));
+}
+
+/**
  * Clean and validate a candidate name string.
  * Returns the cleaned name, or null if it looks like a UI label / junk.
  *
@@ -196,7 +260,10 @@ const INSTRUCTION_WORDS = new Set([
  */
 function cleanName(raw) {
   if (!raw) return null;
-  const clean = raw.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*,.*$/, '').trim();
+  // Always run dedupe first — defense against doubled names from any source
+  // (DOM concatenation, aria-labels, etc.).
+  const deduped = dedupeName(raw);
+  const clean = deduped.replace(/\s*\(.*?\)\s*/g, '').replace(/\s*,.*$/, '').trim();
   if (!clean || clean.length < 2 || clean.length > 60) return null;
   const words = clean.split(/\s+/);
   if (
@@ -233,14 +300,92 @@ function nameFromAncestorAriaLabel(el) {
 // Using a Set ensures no duplicates even across multiple scrapes.
 const seenParticipants = new Set();
 
+/**
+ * Open Google Meet's "People" pane programmatically and harvest the full
+ * participant list from `<div role="listitem">` rows. The People pane is the
+ * authoritative roster source — it shows every participant including phone
+ * joiners and members not currently on screen, far more reliable than the
+ * bottom-left video chip. Idempotent: if pane is already open, just scrapes.
+ *
+ * Falls through silently on non-Meet platforms or DOM changes.
+ */
+async function openAndScrapePeoplePane() {
+  if (!location.hostname.includes('meet.google.com')) return [];
+
+  // If a panel is already mounted, scrape it without toggling anything.
+  let panel = document.querySelector('[aria-label="Participants"], [aria-label="People"]');
+
+  if (!panel) {
+    // Click the "Show everyone" button to open the panel. Button selectors
+    // are intentionally generous — Meet renames this aria-label periodically.
+    const peopleBtn =
+      document.querySelector('button[aria-label*="people" i]') ||
+      document.querySelector('button[aria-label*="participants" i]') ||
+      document.querySelector('button[aria-label*="show everyone" i]');
+    if (peopleBtn) {
+      peopleBtn.click();
+      // Wait briefly for the panel to mount; abort if it never appears.
+      for (let i = 0; i < 20 && !panel; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        panel = document.querySelector('[aria-label="Participants"], [aria-label="People"]');
+      }
+    }
+  }
+
+  if (!panel) return [];
+
+  // Each participant is a role="listitem" with the name in the first text node.
+  const rows = panel.querySelectorAll('[role="listitem"]');
+  const found = [];
+  rows.forEach((row) => {
+    const name = extractCleanName(row);
+    if (name) found.push(name);
+  });
+
+  return found;
+}
+
+/**
+ * Reconcile a DOM-scraped name against an authoritative roster (typically
+ * Google Calendar attendees). When a fuzzy match exists, the roster's
+ * canonical spelling wins; otherwise the DOM name is kept as-is.
+ *
+ * Match rules: exact (case-insensitive), substring either direction (≥3 chars),
+ * or Levenshtein distance ≤ 2 for short names. Conservative on purpose —
+ * "Sai" and "Saisiddharth" share a prefix but should NOT be merged.
+ */
+function reconcileWithRoster(name, roster) {
+  if (!name || !roster || roster.length === 0) return name;
+  const norm = name.toLowerCase().trim();
+
+  for (const r of roster) {
+    if (!r) continue;
+    const rn = r.toLowerCase().trim();
+    if (rn === norm) return r;
+  }
+  // Substring match: "saisid" ⊂ "saisiddharth nandhakumar" → use roster name
+  for (const r of roster) {
+    if (!r) continue;
+    const rn = r.toLowerCase().trim();
+    if (norm.length >= 4 && rn.includes(norm) && Math.abs(rn.length - norm.length) <= 18) return r;
+  }
+  return name;
+}
+
+// Roster of authoritative names (Calendar attendees + self) — populated by
+// background.js at recording start via BASHA_SET_ROSTER. Empty otherwise.
+let canonicalRoster = [];
+
 function scrapeParticipants() {
   const names = new Set();
 
   // Approach 1: Google Meet name overlay — .ZY8hPc.iPFm3e
-  // This is the visible bottom-left name chip on each video tile. Contains a
-  // <span> with the participant's display name.
+  // The visible bottom-left name chip on each video tile. We use extractCleanName
+  // (firstTextNode + dedupeName) instead of raw textContent, because Meet stacks
+  // duplicate spans here (animation/accessibility/transition states) and the
+  // raw textContent concatenates them into "SaisiddharthSaisiddharth".
   document.querySelectorAll('.ZY8hPc.iPFm3e').forEach((el) => {
-    const name = cleanName(el.querySelector('span')?.textContent?.trim() ?? el.textContent?.trim());
+    const name = extractCleanName(el);
     if (name) names.add(name);
   });
 
@@ -278,14 +423,14 @@ function scrapeParticipants() {
   });
 
   // Approach 5: obfuscated class-based selectors (last resort — may change over time)
+  // Use extractCleanName so doubled / concatenated text from these unknown
+  // structures doesn't slip through.
   if (names.size === 0) {
     const selectors = ['.zWfAib', '.KF4T6b', '.cS7aqe', '.YTbUzc', '.dwSJ2e'];
     for (const sel of selectors) {
       document.querySelectorAll(sel).forEach((el) => {
-        const text = el.textContent?.trim() ?? '';
-        if (text.length >= 2 && text.length <= 80 && !EXCLUDE_NAMES.has(text.toLowerCase())) {
-          names.add(text);
-        }
+        const name = extractCleanName(el);
+        if (name) names.add(name);
       });
     }
   }
@@ -296,10 +441,32 @@ function scrapeParticipants() {
 /**
  * Scrape the DOM and add any new names to seenParticipants.
  * Called on every DOM mutation and on explicit BASHA_GET_PARTICIPANTS requests.
+ * Names are reconciled against the canonical roster (Calendar + self) so the
+ * stored spelling matches the authoritative source when a match exists.
  */
 function scrapeAndAccumulate() {
-  for (const name of scrapeParticipants()) {
-    seenParticipants.add(name);
+  for (const raw of scrapeParticipants()) {
+    seenParticipants.add(reconcileWithRoster(raw, canonicalRoster));
+  }
+}
+
+/**
+ * One-shot deep scrape: open the People pane (authoritative roster), merge
+ * results with the regular DOM scrape, reconcile against canonical roster.
+ * Called once at recording start and again on BASHA_GET_PARTICIPANTS so the
+ * server gets the most reliable list possible.
+ */
+async function deepScrape() {
+  const peoplePaneNames = await openAndScrapePeoplePane();
+  for (const raw of peoplePaneNames) {
+    seenParticipants.add(reconcileWithRoster(raw, canonicalRoster));
+  }
+  scrapeAndAccumulate();
+  // Always include the user's own name from the canonical roster (background
+  // adds it as the first entry) — guarantees self-labeling even when Meet's
+  // self-view chip is unreadable.
+  for (const r of canonicalRoster) {
+    if (r) seenParticipants.add(r);
   }
 }
 
@@ -605,13 +772,22 @@ function setupMeetingDetection() {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'BASHA_SET_ROSTER') {
+    // Background passes the canonical roster (selfName + calendar attendees,
+    // when available) at recording start. Stored locally so subsequent scrapes
+    // can reconcile DOM names against authoritative spelling.
+    canonicalRoster = Array.isArray(message.roster) ? message.roster.filter(Boolean) : [];
+    sendResponse({ ok: true, rosterSize: canonicalRoster.length });
+  }
   if (message.type === 'BASHA_GET_PARTICIPANTS') {
-    // Do a fresh scrape before responding to catch any names not yet in seenParticipants
-    scrapeAndAccumulate();
-    sendResponse({
-      participants: [...seenParticipants],
-      activeSpeakerTimeline: [...activeSpeakerTimeline],
+    // Async deep scrape (opens People pane); respond when done.
+    deepScrape().then(() => {
+      sendResponse({
+        participants: [...seenParticipants],
+        activeSpeakerTimeline: [...activeSpeakerTimeline],
+      });
     });
+    return true; // keep the message channel open for async sendResponse
   }
   if (message.type === 'RECORDING_STARTED_FROM_PROMPT') {
     removeRecordingPrompt();
