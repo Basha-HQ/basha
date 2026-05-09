@@ -36,13 +36,15 @@ interface Props {
   sourceLanguage?: string;
 }
 
-// Assign a consistent color per speaker label
+// Assign a consistent color per speaker label.
+// Tints are bumped to match the Layout F design — gradient backgrounds need
+// enough opacity to register against the dark navy card surface.
 const SPEAKER_COLORS: Array<{ color: string; bg: string; border: string }> = [
-  { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
-  { color: '#6366f1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.25)' },
-  { color: '#34d399', bg: 'rgba(52,211,153,0.1)', border: 'rgba(52,211,153,0.2)' },
-  { color: '#fb7185', bg: 'rgba(251,113,133,0.1)', border: 'rgba(251,113,133,0.2)' },
-  { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.2)' },
+  { color: '#f59e0b', bg: 'rgba(245,158,11,0.14)', border: 'rgba(245,158,11,0.28)' },
+  { color: '#818cf8', bg: 'rgba(129,140,248,0.14)', border: 'rgba(129,140,248,0.28)' },
+  { color: '#34d399', bg: 'rgba(52,211,153,0.12)', border: 'rgba(52,211,153,0.22)' },
+  { color: '#fb7185', bg: 'rgba(251,113,133,0.12)', border: 'rgba(251,113,133,0.22)' },
+  { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.22)' },
 ];
 
 const LANG_NAMES: Record<string, string> = {
@@ -148,17 +150,70 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
   const activeSegmentId = activeSegmentIndex >= 0 ? transcripts[activeSegmentIndex]?.id : null;
   const langBadge = sourceLanguage ? (LANG_NAMES[sourceLanguage] ?? sourceLanguage) : null;
 
+  // Slug + label for the WindowChrome path strip
+  const meetingPath = (meetingTitle || 'meeting')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 28) || 'meeting';
+  const chromeLang = langBadge ? langBadge.toLowerCase() : 'mixed';
+  const titlePill = meetingTitle && meetingTitle.length > 0 ? meetingTitle : 'Meeting';
+
   return (
     <>
       <div
         className="rounded-2xl"
         style={{
-          background: 'rgba(255,255,255,0.03)',
+          background: '#0d0d22',
           border: '1px solid rgba(255,255,255,0.07)',
           overflow: 'clip',
         }}
       >
-        {/* Header */}
+        {/* Window Chrome — Layout F context strip */}
+        <div
+          className="flex items-center"
+          style={{
+            gap: 10,
+            padding: '10px 14px',
+            borderBottom: '1px solid rgba(255,255,255,0.07)',
+            background: 'rgba(255,255,255,0.025)',
+          }}
+        >
+          <div className="flex" style={{ gap: 5 }}>
+            {['#ff5f57', '#febc2e', '#28c840'].map((c, i) => (
+              <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
+            ))}
+          </div>
+          <span
+            className="truncate"
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 10,
+              color: 'rgba(255,255,255,0.25)',
+              flex: 1,
+            }}
+          >
+            basha · {meetingPath} · {chromeLang}
+          </span>
+          <span
+            className="truncate"
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: 99,
+              background: 'rgba(245,158,11,0.12)',
+              color: '#f59e0b',
+              border: '1px solid rgba(245,158,11,0.28)',
+              maxWidth: 220,
+            }}
+            title={titlePill}
+          >
+            {titlePill}
+          </span>
+        </div>
+
+        {/* Utility header — search + download */}
         <div
           className="px-6 pt-4 pb-3 flex items-center justify-between gap-4"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}

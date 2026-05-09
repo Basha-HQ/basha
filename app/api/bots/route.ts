@@ -62,12 +62,20 @@ export async function POST(req: NextRequest) {
     }
     meetingId = meeting.id;
 
-    // 2. Call Recall.ai to create a bot that joins the meeting
+    // 2. Call Recall.ai to create a bot that joins the meeting.
+    // Use the user's chosen bot display name so it shows up consistently in
+    // the meeting (and matches the name configured in Settings → Notetaker).
+    const userPrefs = await queryOne<{ bot_display_name: string | null }>(
+      `SELECT bot_display_name FROM users WHERE id = $1`,
+      [session.user.id]
+    );
+    const botName = userPrefs?.bot_display_name?.trim() || 'Basha Notetaker';
+
     // Only register webhook for public URLs — Recall.ai blocks localhost for security
     const baseUrl = process.env.NEXTAUTH_URL ?? '';
     const isPublic = baseUrl.startsWith('https://');
     const webhookUrl = isPublic ? `${baseUrl}/api/webhooks/recall` : undefined;
-    const recallBot = await createRecallBot(meetingUrl, 'Basha', webhookUrl);
+    const recallBot = await createRecallBot(meetingUrl, botName, webhookUrl);
 
     // 3. Store bot record with Recall.ai bot ID
     const bot = await queryOne<{ id: string }>(

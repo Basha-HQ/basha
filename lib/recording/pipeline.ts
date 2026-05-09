@@ -41,8 +41,18 @@ const NON_ROMAN_RE = /[^\p{ASCII}\p{P}\p{Z}\p{N}À-ɏ]/u;
  */
 async function persistDetectedLanguage(meetingId: string, languageCode: string | null): Promise<void> {
   if (!languageCode) return;
+  // Write to BOTH detected_language (analytics) and source_language (UI):
+  // the transcript viewer renders its language badge from source_language.
+  // Only overwrite source_language when it's blank or 'auto' so a user who
+  // manually picked "Tamil" in the UI still gets that label.
   await query(
-    `UPDATE meetings SET detected_language = $1 WHERE id = $2 AND detected_language IS NULL`,
+    `UPDATE meetings
+     SET detected_language = COALESCE(detected_language, $1),
+         source_language   = CASE
+           WHEN source_language IS NULL OR source_language = 'auto' THEN $1
+           ELSE source_language
+         END
+     WHERE id = $2`,
     [languageCode, meetingId]
   );
 }

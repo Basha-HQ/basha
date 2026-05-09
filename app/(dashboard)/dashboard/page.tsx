@@ -1,7 +1,8 @@
 import { auth } from '@/lib/auth/config';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import Link from 'next/link';
 import { MeetingCard } from '@/components/meetings/MeetingCard';
+import { UpcomingMeetings } from '@/components/dashboard/UpcomingMeetings';
 
 interface Meeting {
   id: string;
@@ -38,11 +39,12 @@ export default async function DashboardPage() {
   const userId = session!.user.id;
   const firstName = session!.user.name?.split(' ')[0] ?? 'there';
 
-  const extensionToken = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM extension_tokens WHERE user_id = $1 AND expires_at > NOW()`,
+  const calendarRow = await queryOne<{ google_calendar_connected: boolean; auto_join_mode: string }>(
+    `SELECT google_calendar_connected, auto_join_mode FROM users WHERE id = $1`,
     [userId]
   );
-  const extensionConnected = Number(extensionToken[0]?.count ?? 0) > 0;
+  const calendarConnected = !!calendarRow?.google_calendar_connected;
+  const autoJoinMode = calendarRow?.auto_join_mode ?? 'off';
 
   const recentMeetings = await query<Meeting>(
     `SELECT id, title, platform, status, created_at, duration, source_language, summary
@@ -97,25 +99,25 @@ export default async function DashboardPage() {
 
   const quickStartSteps = [
     {
-      done: extensionConnected,
-      label: 'Install Chrome Extension',
-      sublabel: 'One-time setup for bot-free recording',
-      href: '/settings#integrations',
-      cta: 'Set up',
+      done: calendarConnected,
+      label: 'Connect Google Calendar',
+      sublabel: 'Lets the notetaker auto-join your scheduled meetings',
+      href: '/settings',
+      cta: 'Connect',
+    },
+    {
+      done: autoJoinMode !== 'off',
+      label: 'Choose auto-join behaviour',
+      sublabel: 'Pick which meetings the notetaker should join',
+      href: '/settings',
+      cta: 'Configure',
     },
     {
       done: Number(stats?.total ?? 0) > 0,
       label: 'Record your first meeting',
-      sublabel: 'Open a Meet tab and click the Basha icon',
+      sublabel: 'Auto-join, or paste a link to start manually',
       href: '/new-meeting',
       cta: 'Start',
-    },
-    {
-      done: Number(stats?.completed ?? 0) > 0,
-      label: 'Read your first transcript',
-      sublabel: 'Hinglish, Tanglish — all preserved',
-      href: '/meetings',
-      cta: 'View',
     },
   ];
   const allDone = quickStartSteps.every((s) => s.done);
@@ -224,21 +226,21 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {/* Extension not connected banner */}
-        {!extensionConnected && (
+        {/* Calendar not connected banner */}
+        {!calendarConnected && (
           <div
             className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl mb-6 animate-fade-up-2"
             style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
           >
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Chrome Extension not connected — Basha can&apos;t record meetings yet.
+              Google Calendar not connected — connect it so the notetaker can auto-join your meetings.
             </p>
             <a
-              href="/settings#integrations"
+              href="/settings"
               className="text-xs font-semibold whitespace-nowrap flex items-center gap-1 hover:opacity-80 transition-opacity"
               style={{ color: '#f59e0b' }}
             >
-              Set it up
+              Connect Calendar
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
@@ -276,6 +278,11 @@ export default async function DashboardPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Upcoming meetings (Fathom-style) */}
+        <div className="mb-10 animate-fade-up-3">
+          <UpcomingMeetings calendarConnected={calendarConnected} />
         </div>
 
         {/* Two-column content */}

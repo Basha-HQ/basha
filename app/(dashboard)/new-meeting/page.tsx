@@ -1,34 +1,36 @@
 import { NewMeetingForm } from '@/components/meetings/NewMeetingForm';
+import Link from 'next/link';
 
 export const metadata = { title: 'Record Meeting — Basha' };
 
-const HOW_IT_WORKS_EXTENSION = [
+const HOW_IT_WORKS = [
   {
-    icon: '🔌',
-    title: 'Install the Basha extension',
-    desc: 'One-time Chrome install. No bot invites. No meeting link needed.',
+    icon: '📅',
+    title: 'Connect Google Calendar',
+    desc: 'Auto-join every scheduled meeting. Toggle which ones to record.',
     color: '#6366f1',
     colorBg: 'rgba(99,102,241,0.12)',
     colorBorder: 'rgba(99,102,241,0.2)',
+    href: '/settings',
+    cta: 'Set up auto-join',
   },
   {
-    icon: '🎙',
-    title: 'Hit Record when meeting starts',
-    desc: 'Click the Basha icon in Chrome. Nothing joins your call — invisible to all participants.',
+    icon: '🔗',
+    title: 'Or paste a meeting link',
+    desc: 'Drop a Meet, Zoom, or Teams URL here. The bot joins and records the call.',
     color: '#f59e0b',
     colorBg: 'rgba(245,158,11,0.1)',
     colorBorder: 'rgba(245,158,11,0.2)',
   },
   {
     icon: '📝',
-    title: 'Get your transcript',
-    desc: 'Basha transcribes your Hinglish, Tanglish, or Tamil in the original language — plus a clean English version.',
+    title: 'Get a dual transcript',
+    desc: 'Tanglish, Hinglish, Tamil — original in roman script + clean English translation.',
     color: '#34d399',
     colorBg: 'rgba(52,211,153,0.1)',
     colorBorder: 'rgba(52,211,153,0.2)',
   },
 ];
-
 
 export default function NewMeetingPage() {
   return (
@@ -48,10 +50,10 @@ export default function NewMeetingPage() {
         <div className="mb-8 animate-fade-up-1">
           <p className="text-sm font-medium mb-1" style={{ color: '#6366f1' }}>AI Notetaker</p>
           <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
-            Record your meeting
+            Record an ad-hoc meeting
           </h1>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            No bots. No invites. Just click record.
+            Paste a meeting link and the Basha Notetaker will join. For scheduled meetings, set up auto-join in <Link href="/settings" className="underline" style={{ color: '#6366f1' }}>Settings</Link>.
           </p>
         </div>
 
@@ -62,9 +64,8 @@ export default function NewMeetingPage() {
             <NewMeetingForm />
           </div>
 
-          {/* How it works — two variants, shown by CSS based on URL hash (JS-free fallback: show extension steps by default) */}
+          {/* How it works */}
           <div className="lg:w-72 flex-shrink-0 space-y-4">
-            {/* Extension steps (default / primary) */}
             <div
               className="rounded-2xl p-5"
               style={{
@@ -73,10 +74,10 @@ export default function NewMeetingPage() {
               }}
             >
               <p className="text-xs font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                Extension — how it works
+                How it works
               </p>
               <div className="space-y-5">
-                {HOW_IT_WORKS_EXTENSION.map((item, i) => (
+                {HOW_IT_WORKS.map((item, i) => (
                   <div key={i} className="flex gap-3.5">
                     <div
                       className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
@@ -87,6 +88,11 @@ export default function NewMeetingPage() {
                     <div className="pt-0.5">
                       <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>{item.title}</p>
                       <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>{item.desc}</p>
+                      {item.href && (
+                        <Link href={item.href} className="text-xs font-semibold mt-1 inline-block hover:opacity-80 transition-opacity" style={{ color: item.color }}>
+                          {item.cta} →
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -98,7 +104,6 @@ export default function NewMeetingPage() {
                 </p>
               </div>
             </div>
-
           </div>
         </div>
       </div>

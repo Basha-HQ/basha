@@ -18,39 +18,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getExtensionUser } from '@/lib/extension/auth';
-import { queryOne, query } from '@/lib/db';
-
-interface CalendarUser {
-  name: string | null;
-  google_access_token: string | null;
-  google_refresh_token: string | null;
-  google_token_expiry: Date | null;
-  google_calendar_connected: boolean;
-}
-
-async function getRefreshedToken(refreshToken: string, userId: string): Promise<string | null> {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json() as { access_token?: string };
-  const newToken = data.access_token ?? null;
-  if (newToken) {
-    const newExpiry = new Date(Date.now() + 3600 * 1000).toISOString();
-    await query(
-      'UPDATE users SET google_access_token = $1, google_token_expiry = $2 WHERE id = $3',
-      [newToken, newExpiry, userId]
-    );
-  }
-  return newToken;
-}
+import { queryOne } from '@/lib/db';
+import { getValidAccessToken } from '@/lib/calendar/token';
 
 function meetCodeFromUrl(url: string): string | null {
   // Google Meet URLs look like https://meet.google.com/abc-defg-hij
@@ -66,28 +35,16 @@ export async function GET(req: NextRequest) {
 
   const meetingUrl = req.nextUrl.searchParams.get('meetingUrl') ?? '';
 
-  const user = await queryOne<CalendarUser>(
-    `SELECT name, google_access_token, google_refresh_token, google_token_expiry, google_calendar_connected
-     FROM users WHERE id = $1`,
+  const user = await queryOne<{ name: string | null }>(
+    `SELECT name FROM users WHERE id = $1`,
     [userId]
   );
-
   const selfName = (user?.name ?? '').trim() || null;
 
   // Calendar overlay is best-effort. Without OAuth we still return selfName.
-  if (!user?.google_calendar_connected || !user.google_access_token) {
+  const token = await getValidAccessToken(userId);
+  if (!token) {
     return NextResponse.json({ selfName, calendarAttendees: null });
-  }
-
-  // Refresh access token if expired (5-min buffer)
-  let token = user.google_access_token;
-  const expiry = user.google_token_expiry ? new Date(user.google_token_expiry).getTime() : 0;
-  if (Date.now() >= expiry - 5 * 60 * 1000 && user.google_refresh_token) {
-    const refreshed = await getRefreshedToken(user.google_refresh_token, userId);
-    if (!refreshed) {
-      return NextResponse.json({ selfName, calendarAttendees: null });
-    }
-    token = refreshed;
   }
 
   // Search a window around now for events whose hangoutLink matches.

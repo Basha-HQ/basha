@@ -74,14 +74,10 @@ async function resetToIdleState() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  const { authed } = await send('CHECK_AUTH');
-  if (!authed) {
-    const origin = await getOrigin();
-    document.getElementById('btn-open-app').href = `${origin}/dashboard/settings`;
-    showView('view-auth');
-    return;
-  }
-
+  // Basha has shifted to a Notetaker-bot-first architecture. The extension
+  // recorder is no longer the primary path. We still finish any in-flight
+  // recording (uploading/processing/completed/failed states) so users don't
+  // lose work, but new sessions are redirected into the web app.
   const state = await send('GET_STATE');
 
   if (state.isRecording && state.status === 'recording') {
@@ -115,16 +111,12 @@ async function init() {
     return;
   }
 
-  // Idle — check current tab
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const matched = MEETING_PATTERNS.find(({ re }) => re.test(tab?.url || ''));
-  if (matched) {
-    currentMeetingUrl = tab.url;
-    document.getElementById('meeting-platform').textContent = matched.label;
-    showView('view-ready');
-  } else {
-    showView('view-no-tab');
-  }
+  // No active session — show the bot-mode redirect message regardless of
+  // whether the user is on a meeting tab or not.
+  const origin = await getOrigin();
+  document.getElementById('btn-bot-mode-app').href = `${origin}/dashboard`;
+  document.getElementById('btn-bot-mode-new').href = `${origin}/new-meeting`;
+  showView('view-bot-mode');
 }
 
 // ---------------------------------------------------------------------------
