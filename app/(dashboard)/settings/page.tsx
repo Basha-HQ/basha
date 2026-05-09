@@ -1,4 +1,3 @@
-import { ExtensionIntegration } from '@/components/settings/ExtensionIntegration';
 import { NotetakerSettings } from '@/components/settings/NotetakerSettings';
 
 export const metadata = { title: 'Settings — Basha' };
@@ -24,16 +23,13 @@ export default function SettingsPage() {
             Settings
           </h1>
           <p className="text-sm mt-2 font-light" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            Manage your preferences and integrations.
+            Manage your notetaker preferences.
           </p>
         </div>
 
         <div className="space-y-4">
           <div className="animate-fade-up-2">
             <NotetakerSettings />
-          </div>
-          <div id="integrations" className="animate-fade-up-2">
-            <ExtensionIntegration />
           </div>
         </div>
       </div>

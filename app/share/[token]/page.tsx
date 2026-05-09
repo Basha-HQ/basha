@@ -83,7 +83,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
         <Link href="/" className="font-bold hover:underline" style={{ color: '#c4b5fd' }}>
           Basha
         </Link>
-        {' '}— bot-free meeting recorder for Indian languages
+        {' '}— AI meeting notetaker for Indian languages
       </div>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-8">

@@ -247,3 +247,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_transcripts_unique_segment
 -- tiebreaker path) skip re-detection. Populated by the pipeline once on the
 -- first chunk; null until then.
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS detected_language TEXT;
+
+-- ── Bot-first architecture migration (2026-05-09) ──────────────────────────
+-- Applied directly to Railway. Vercel deployment will pick up the new
+-- cron route, NotetakerSettings, UpcomingMeetings, and bot-only flows.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bot_display_name TEXT DEFAULT 'Basha Notetaker';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_join_mode TEXT DEFAULT 'off'
+  CHECK (auto_join_mode IN ('off', 'all', 'organizer_only'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_calendar_sync TIMESTAMPTZ;

@@ -111,17 +111,11 @@ export function DoneStep({ onBack, saving, error, onRetry }: Props) {
 
           {/* CTAs */}
           <button
-            onClick={() => { window.open('https://chromewebstore.google.com/detail/basha/kljamnehjflkogflokigndnaoeagelke', '_blank'); }}
+            onClick={() => { window.location.href = '/new-meeting'; }}
             className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-bold text-sm mb-3 btn-amber-shimmer"
             style={{ color: '#07071a' }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg"
-              alt="Chrome"
-              className="w-5 h-5 flex-shrink-0"
-            />
-            Set up Chrome Extension →
+            Record your first meeting →
           </button>
           <button
             onClick={() => { window.location.href = '/dashboard'; }}
