@@ -123,6 +123,29 @@
     /* ── Auth ────────────────────────────────────────────── */
     .auth-hint { font-size: 12px; color: #475569; line-height: 1.5; }
 
+    /* ── Meeting URL input ───────────────────────────────── */
+    .url-input {
+      width: 100%; background: #111827; border: 1px solid #1e293b;
+      color: #e2e8f0; border-radius: 8px; padding: 9px 12px;
+      font-size: 12px; outline: none; transition: border-color 0.15s;
+    }
+    .url-input::placeholder { color: #475569; }
+    .url-input:focus { border-color: #f59e0b; }
+    .url-error { font-size: 11px; color: #f87171; margin-top: -4px; display: none; }
+
+    /* ── Bot active ──────────────────────────────────────── */
+    .bot-status-row {
+      display: flex; align-items: center; gap: 10px;
+      background: #0f172a; border: 1px solid #1e293b;
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .bot-status-dot {
+      width: 9px; height: 9px; background: #f59e0b; border-radius: 50%;
+      flex-shrink: 0; animation: pulse 1.2s infinite;
+    }
+    .bot-status-label { font-size: 13px; font-weight: 600; }
+    .bot-status-url { font-size: 11px; color: #64748b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 210px; }
+
     /* ── Error ───────────────────────────────────────────── */
     .error-box {
       background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);
@@ -151,14 +174,26 @@
   <div class="header-name">Basha</div>
 </div>
 
-<!-- ── VIEW: bot mode (default — replaces extension recording) ───────── -->
+<!-- ── VIEW: bot mode — meeting link input ───────────────── -->
 <div id="view-bot-mode" class="view">
-  <p class="auth-hint">Basha now records via a Notetaker bot that joins your meetings.</p>
-  <p class="auth-hint" style="font-size:11px;color:#475569;line-height:1.5;">
-    Connect Google Calendar in the web app to auto-join your meetings, or paste a meeting link to record any call.
-  </p>
-  <a id="btn-bot-mode-app" href="#" class="btn btn-primary" target="_blank">Open Basha →</a>
-  <a id="btn-bot-mode-new" href="#" class="btn btn-ghost" target="_blank">Record an ad-hoc call</a>
+  <p class="text-label" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Launch Notetaker</p>
+  <input id="bot-url-input" class="url-input" type="text" placeholder="Paste meeting link (Meet, Zoom, Teams, Webex)" autocomplete="off" spellcheck="false" />
+  <p id="url-error" class="url-error">Paste a valid Google Meet, Zoom, Teams, or Webex link.</p>
+  <button id="btn-launch-bot" class="btn btn-primary">Launch Bot</button>
+  <div style="border-top:1px solid #1a1f35;margin-top:2px;"></div>
+  <a id="btn-bot-mode-app" href="#" class="btn btn-ghost" target="_blank">Open Dashboard →</a>
+</div>
+
+<!-- ── VIEW: bot active (joining / recording) ───────────── -->
+<div id="view-bot-active" class="view">
+  <div class="bot-status-row">
+    <div class="bot-status-dot"></div>
+    <div>
+      <div class="bot-status-label" id="bot-status-label">Joining meeting…</div>
+      <div class="bot-status-url" id="bot-status-url"></div>
+    </div>
+  </div>
+  <a id="btn-bot-dashboard" href="#" class="btn btn-ghost" target="_blank">Open Dashboard →</a>
 </div>
 
 <!-- ── VIEW: not authenticated ──────────────────────────── -->
@@ -172,7 +207,7 @@
 
 <!-- ── VIEW: no meeting tab detected ────────────────────── -->
 <div id="view-no-tab" class="view">
-  <p class="idle-hint">Open a Google Meet, Zoom, or Teams meeting and click the Basha icon to record.</p>
+  <p class="idle-hint">Open a Google Meet, Zoom, Teams, or Webex meeting and click the Basha icon to record.</p>
   <button id="btn-open-meet" class="btn btn-ghost">Start a meeting</button>
 </div>
 

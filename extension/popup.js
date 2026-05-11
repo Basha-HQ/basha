@@ -8,9 +8,15 @@ const MEETING_PATTERNS = [
   { re: /meet\.google\.com\/[a-z]/, label: 'Google Meet' },
   { re: /zoom\.us\/(j|wc)\/|app\.zoom\.us/, label: 'Zoom' },
   { re: /teams\.(microsoft|live)\.com/, label: 'Microsoft Teams' },
+  { re: /webex\.com\/meet\/|\.webex\.com\/j\//, label: 'Webex' },
 ];
 
+// Supported meeting URL patterns for bot launching (broader than tab detection)
+const BOT_URL_RE =
+  /meet\.google\.com\/|zoom\.us\/(j|wc)\/|app\.zoom\.us|teams\.(microsoft|live)\.com|webex\.com\/meet\/|\.webex\.com\/j\//;
+
 let timerInterval = null;
+let botPollInterval = null;
 let currentMeetingUrl = '';
 
 // ---------------------------------------------------------------------------
@@ -46,9 +52,81 @@ function stopTimer() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
+function stopBotPoll() {
+  if (botPollInterval) { clearInterval(botPollInterval); botPollInterval = null; }
+}
+
 async function getOrigin() {
   const { appOrigin } = await chrome.storage.local.get('appOrigin');
   return appOrigin || APP_ORIGINS[0];
+}
+
+function isValidMeetingUrl(url) {
+  return BOT_URL_RE.test(url);
+}
+
+function truncateUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname + u.pathname.slice(0, 30) + (u.pathname.length > 30 ? '…' : '');
+  } catch {
+    return url.slice(0, 40);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bot status label mapping
+// ---------------------------------------------------------------------------
+
+function botPhaseLabel(botPhase, meetingStatus) {
+  if (meetingStatus === 'completed') return 'Done';
+  if (meetingStatus === 'failed') return 'Failed';
+  if (meetingStatus === 'processing') return 'Processing transcript…';
+  switch (botPhase) {
+    case 'joining': return 'Joining meeting…';
+    case 'in_meeting': return 'Bot in meeting';
+    case 'recording': return 'Recording…';
+    case 'leaving': return 'Meeting ended, processing…';
+    default: return 'Joining meeting…';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bot status polling
+// ---------------------------------------------------------------------------
+
+async function startBotPolling(meetingId, authToken, origin) {
+  stopBotPoll();
+
+  document.getElementById('btn-bot-dashboard').href = `${origin}/meetings/${meetingId}`;
+  document.getElementById('bot-status-label').textContent = 'Joining meeting…';
+
+  botPollInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`${origin}/api/extension/status/${meetingId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const label = botPhaseLabel(data.botPhase, data.status);
+      document.getElementById('bot-status-label').textContent = label;
+
+      if (data.status === 'completed') {
+        stopBotPoll();
+        await chrome.storage.session.remove('botMeetingId');
+        document.getElementById('btn-view-notes').href = `${origin}${data.meetingUrl}`;
+        showView('view-done');
+      } else if (data.status === 'failed') {
+        stopBotPoll();
+        await chrome.storage.session.remove('botMeetingId');
+        document.getElementById('error-msg').textContent = 'Bot failed to process the meeting.';
+        showView('view-failed');
+      }
+    } catch {
+      // network hiccup — keep polling
+    }
+  }, 3000);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +135,8 @@ async function getOrigin() {
 
 async function resetToIdleState() {
   stopTimer();
-  await chrome.storage.session.remove(['status', 'meetingId', 'processingUrl', 'error']);
+  stopBotPoll();
+  await chrome.storage.session.remove(['status', 'meetingId', 'processingUrl', 'error', 'botMeetingId']);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const matched = MEETING_PATTERNS.find(({ re }) => re.test(tab?.url || ''));
   if (matched) {
@@ -65,7 +144,12 @@ async function resetToIdleState() {
     document.getElementById('meeting-platform').textContent = matched.label;
     showView('view-ready');
   } else {
-    showView('view-no-tab');
+    const { authToken } = await chrome.storage.local.get('authToken');
+    if (!authToken) {
+      showView('view-auth');
+    } else {
+      showView('view-bot-mode');
+    }
   }
 }
 
@@ -74,10 +158,6 @@ async function resetToIdleState() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  // Basha has shifted to a Notetaker-bot-first architecture. The extension
-  // recorder is no longer the primary path. We still finish any in-flight
-  // recording (uploading/processing/completed/failed states) so users don't
-  // lose work, but new sessions are redirected into the web app.
   const state = await send('GET_STATE');
 
   if (state.isRecording && state.status === 'recording') {
@@ -98,8 +178,8 @@ async function init() {
     return;
   }
   if (state.status === 'completed') {
+    const origin = await getOrigin();
     if (state.processingUrl) {
-      const origin = await getOrigin();
       document.getElementById('btn-view-notes').href = `${origin}${state.processingUrl}`;
     }
     showView('view-done');
@@ -111,16 +191,104 @@ async function init() {
     return;
   }
 
-  // No active session — show the bot-mode redirect message regardless of
-  // whether the user is on a meeting tab or not.
+  // Check auth token
+  const { authToken } = await chrome.storage.local.get('authToken');
+  if (!authToken) {
+    const origin = await getOrigin();
+    document.getElementById('btn-open-app').href = `${origin}/settings`;
+    showView('view-auth');
+    return;
+  }
+
   const origin = await getOrigin();
   document.getElementById('btn-bot-mode-app').href = `${origin}/dashboard`;
-  document.getElementById('btn-bot-mode-new').href = `${origin}/new-meeting`;
+
+  // If there's an in-flight bot session, restore it
+  const { botMeetingId } = await chrome.storage.session.get('botMeetingId');
+  if (botMeetingId) {
+    const urlStore = await chrome.storage.session.get('botMeetingUrl');
+    document.getElementById('bot-status-url').textContent = urlStore.botMeetingUrl
+      ? truncateUrl(urlStore.botMeetingUrl)
+      : '';
+    showView('view-bot-active');
+    await startBotPolling(botMeetingId, authToken, origin);
+    return;
+  }
+
   showView('view-bot-mode');
 }
 
 // ---------------------------------------------------------------------------
-// Start recording
+// Launch Bot button
+// ---------------------------------------------------------------------------
+
+document.getElementById('btn-launch-bot').addEventListener('click', async () => {
+  const input = document.getElementById('bot-url-input');
+  const errorEl = document.getElementById('url-error');
+  const meetingUrl = input.value.trim();
+
+  errorEl.style.display = 'none';
+
+  if (!meetingUrl || !isValidMeetingUrl(meetingUrl)) {
+    errorEl.style.display = 'block';
+    input.focus();
+    return;
+  }
+
+  const { authToken } = await chrome.storage.local.get('authToken');
+  if (!authToken) {
+    showView('view-auth');
+    return;
+  }
+
+  const origin = await getOrigin();
+  const btn = document.getElementById('btn-launch-bot');
+  btn.textContent = 'Launching…';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`${origin}/api/extension/bot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ meetingUrl }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      errorEl.textContent = data.error || 'Failed to launch bot. Try again.';
+      errorEl.style.display = 'block';
+      btn.textContent = 'Launch Bot';
+      btn.disabled = false;
+      return;
+    }
+
+    const { meetingId } = data;
+    await chrome.storage.session.set({ botMeetingId: meetingId, botMeetingUrl: meetingUrl });
+
+    document.getElementById('bot-status-url').textContent = truncateUrl(meetingUrl);
+    document.getElementById('bot-status-label').textContent = 'Joining meeting…';
+    document.getElementById('btn-bot-dashboard').href = `${origin}/meetings/${meetingId}`;
+    showView('view-bot-active');
+    await startBotPolling(meetingId, authToken, origin);
+  } catch {
+    errorEl.textContent = 'Network error. Check your connection and try again.';
+    errorEl.style.display = 'block';
+    btn.textContent = 'Launch Bot';
+    btn.disabled = false;
+  }
+});
+
+// Clear error on input change
+document.getElementById('bot-url-input').addEventListener('input', () => {
+  document.getElementById('url-error').style.display = 'none';
+});
+
+// ---------------------------------------------------------------------------
+// Start recording (extension tab-capture — legacy flow)
 // ---------------------------------------------------------------------------
 
 document.getElementById('btn-start').addEventListener('click', async () => {
@@ -174,18 +342,17 @@ document.getElementById('btn-stop').addEventListener('click', async () => {
 // ---------------------------------------------------------------------------
 
 document.getElementById('btn-open-meet').addEventListener('click', async () => {
-  // Open the platform the user last recorded on, or Google Meet as default
   const { lastMeetingUrl } = await chrome.storage.local.get('lastMeetingUrl');
   let url = 'https://meet.google.com/new';
   if (lastMeetingUrl) {
     if (lastMeetingUrl.includes('zoom.us')) url = 'https://zoom.us/start/videomeeting';
     else if (lastMeetingUrl.includes('teams.microsoft.com') || lastMeetingUrl.includes('teams.live.com')) url = 'https://teams.microsoft.com';
+    else if (lastMeetingUrl.includes('webex.com')) url = 'https://webex.com';
   }
   chrome.tabs.create({ url });
 });
 
 document.getElementById('btn-view-notes').addEventListener('click', () => {
-  // Link opens in new tab (target=_blank); then reset popup to idle
   setTimeout(() => resetToIdleState(), 100);
 });
 

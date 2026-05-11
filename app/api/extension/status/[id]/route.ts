@@ -1,6 +1,7 @@
 /**
  * GET /api/extension/status/[id]
  * Polls meeting processing status for the Chrome extension.
+ * Also returns bot phase when a Recall.ai bot is associated.
  * Auth: Extension Bearer token.
  */
 
@@ -11,6 +12,7 @@ import { queryOne } from '@/lib/db';
 interface MeetingStatusRow {
   status: string;
   title: string;
+  bot_phase: string | null;
 }
 
 export async function GET(
@@ -25,7 +27,12 @@ export async function GET(
   const { id } = await params;
 
   const meeting = await queryOne<MeetingStatusRow>(
-    `SELECT status, title FROM meetings WHERE id = $1 AND user_id = $2`,
+    `SELECT m.status, m.title, b.status AS bot_phase
+     FROM meetings m
+     LEFT JOIN bots b ON b.meeting_id = m.id
+     WHERE m.id = $1 AND m.user_id = $2
+     ORDER BY b.created_at DESC
+     LIMIT 1`,
     [id, userId]
   );
 
@@ -36,6 +43,7 @@ export async function GET(
   return NextResponse.json({
     status: meeting.status,
     title: meeting.title,
+    botPhase: meeting.bot_phase ?? null,
     meetingUrl: `/meetings/${id}`,
   });
 }

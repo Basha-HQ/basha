@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { signIn } from 'next-auth/react';
 
 interface Settings {
   auto_join_mode: 'off' | 'all' | 'organizer_only';
   bot_display_name: string;
-  meeting_platform: 'google_meet' | 'zoom' | 'both';
   google_calendar_connected: boolean;
 }
 
@@ -40,7 +40,6 @@ export function NotetakerSettings() {
         setSettings({
           auto_join_mode: s.auto_join_mode ?? 'off',
           bot_display_name: s.bot_display_name ?? 'Basha Notetaker',
-          meeting_platform: s.meeting_platform ?? 'both',
           google_calendar_connected: !!s.google_calendar_connected,
         });
         setLoading(false);
@@ -122,13 +121,13 @@ export function NotetakerSettings() {
             <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
               Auto-join only works for meetings on your calendar. You can still launch the bot manually for ad-hoc meetings.
             </p>
-            <a
-              href="/api/auth/signin?provider=google"
+            <button
+              onClick={() => signIn('google', { callbackUrl: '/settings' })}
               className="inline-block mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg"
-              style={{ background: '#f59e0b', color: '#07071a' }}
+              style={{ background: '#f59e0b', color: '#07071a', border: 'none', cursor: 'pointer' }}
             >
               Connect Calendar →
-            </a>
+            </button>
           </div>
         </div>
       )}
@@ -170,34 +169,6 @@ export function NotetakerSettings() {
                     </p>
                   </div>
                 </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Platform filter */}
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Platforms
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {(['both', 'google_meet', 'zoom'] as const).map((p) => {
-            const active = settings.meeting_platform === p;
-            const label = p === 'both' ? 'All platforms' : p === 'google_meet' ? 'Google Meet only' : 'Zoom only';
-            return (
-              <button
-                key={p}
-                onClick={() => patch({ meeting_platform: p })}
-                className="text-xs font-semibold px-3 py-2 rounded-lg transition-all"
-                style={{
-                  background: active ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)',
-                  color: active ? '#f59e0b' : 'rgba(255,255,255,0.6)',
-                  border: active ? '1px solid rgba(245,158,11,0.35)' : '1px solid rgba(255,255,255,0.06)',
-                  cursor: 'pointer',
-                }}
-              >
-                {label}
               </button>
             );
           })}

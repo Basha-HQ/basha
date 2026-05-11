@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
        AND i.bot_launched = false
        AND u.auto_join_mode != 'off'
        AND i.scheduled_start IS NOT NULL
-       AND i.scheduled_start <= NOW() + INTERVAL '2 minutes'
+       AND i.scheduled_start <= NOW() + INTERVAL '6 minutes'
        AND i.scheduled_start >  NOW() - INTERVAL '5 minutes'
      ORDER BY i.scheduled_start ASC
      LIMIT 20`
@@ -113,9 +113,10 @@ export async function GET(req: NextRequest) {
       const isMeet = url.includes('meet.google.com');
       const isZoom = url.includes('zoom.us');
       const isTeams = url.includes('teams.microsoft.com') || url.includes('teams.live.com');
+      const isWebex = url.includes('webex.com');
       if (user.meeting_platform === 'google_meet' && !isMeet) continue;
       if (user.meeting_platform === 'zoom' && !isZoom) continue;
-      if (!isMeet && !isZoom && !isTeams) continue; // unsupported URL
+      if (!isMeet && !isZoom && !isTeams && !isWebex) continue; // unsupported URL
 
       let platform: 'google_meet' | 'zoom' | 'other' = 'other';
       if (isMeet) platform = 'google_meet';
