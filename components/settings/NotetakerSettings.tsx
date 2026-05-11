@@ -30,6 +30,7 @@ const MODE_OPTIONS: Array<{ value: Settings['auto_join_mode']; title: string; su
 export function NotetakerSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
@@ -46,6 +47,17 @@ export function NotetakerSettings() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  async function disconnectCalendar() {
+    if (!settings) return;
+    setDisconnecting(true);
+    try {
+      await fetch('/api/user/calendar', { method: 'DELETE' });
+      setSettings({ ...settings, google_calendar_connected: false });
+    } finally {
+      setDisconnecting(false);
+    }
+  }
 
   async function patch(updates: Partial<Settings>) {
     if (!settings) return;
@@ -99,38 +111,59 @@ export function NotetakerSettings() {
         ) : null}
       </div>
 
-      {/* Calendar connection prompt */}
-      {!settings.google_calendar_connected && (
-        <div
-          className="rounded-xl p-4 mb-5 flex items-start gap-3"
-          style={{
-            background: 'rgba(245,158,11,0.06)',
-            border: '1px solid rgba(245,158,11,0.18)',
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#f59e0b', marginTop: 2 }}>
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-          <div className="flex-1">
-            <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-              Connect Google Calendar
-            </p>
-            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              Auto-join only works for meetings on your calendar. You can still launch the bot manually for ad-hoc meetings.
-            </p>
-            <button
-              onClick={() => signIn('google', { callbackUrl: '/settings' })}
-              className="inline-block mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg"
-              style={{ background: '#f59e0b', color: '#07071a', border: 'none', cursor: 'pointer' }}
-            >
-              Connect Calendar →
-            </button>
-          </div>
+      {/* Calendar connection */}
+      <div
+        className="rounded-xl p-4 mb-5 flex items-start gap-3"
+        style={{
+          background: settings.google_calendar_connected ? 'rgba(16,185,129,0.05)' : 'rgba(245,158,11,0.06)',
+          border: settings.google_calendar_connected ? '1px solid rgba(16,185,129,0.18)' : '1px solid rgba(245,158,11,0.18)',
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: settings.google_calendar_connected ? '#34d399' : '#f59e0b', marginTop: 2 }}>
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <div className="flex-1">
+          {settings.google_calendar_connected ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold" style={{ color: '#34d399' }}>
+                  Google Calendar connected
+                </p>
+                <button
+                  onClick={disconnectCalendar}
+                  disabled={disconnecting}
+                  className="text-xs font-semibold px-2.5 py-1 rounded-lg disabled:opacity-50"
+                  style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer' }}
+                >
+                  {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              </div>
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Auto-join is active. Basha will sync your upcoming meetings.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                Connect Google Calendar
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Auto-join only works for meetings on your calendar. You can still launch the bot manually for ad-hoc meetings.
+              </p>
+              <button
+                onClick={() => signIn('google', { callbackUrl: '/settings' })}
+                className="inline-block mt-3 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ background: '#f59e0b', color: '#07071a', border: 'none', cursor: 'pointer' }}
+              >
+                Connect Calendar →
+              </button>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Auto-join mode (radio list) */}
       <div className="mb-6">

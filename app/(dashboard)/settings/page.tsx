@@ -1,4 +1,5 @@
 import { NotetakerSettings } from '@/components/settings/NotetakerSettings';
+import { ExtensionIntegration } from '@/components/settings/ExtensionIntegration';
 
 export const metadata = { title: 'Settings — Basha' };
 
@@ -30,6 +31,9 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div className="animate-fade-up-2">
             <NotetakerSettings />
+          </div>
+          <div className="animate-fade-up-3">
+            <ExtensionIntegration />
           </div>
         </div>
       </div>
