@@ -1,0 +1,17 @@
+name: Auto-join cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fire auto-join cron
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ secrets.APP_URL }}/api/cron/auto-join" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
