@@ -144,8 +144,8 @@ async function resetToIdleState() {
     document.getElementById('meeting-platform').textContent = matched.label;
     showView('view-ready');
   } else {
-    const { authToken } = await chrome.storage.local.get('authToken');
-    if (!authToken) {
+    const { extensionToken } = await chrome.storage.local.get('extensionToken');
+    if (!extensionToken) {
       showView('view-auth');
     } else {
       showView('view-bot-mode');
@@ -192,8 +192,8 @@ async function init() {
   }
 
   // Check auth token
-  const { authToken } = await chrome.storage.local.get('authToken');
-  if (!authToken) {
+  const { extensionToken } = await chrome.storage.local.get('extensionToken');
+  if (!extensionToken) {
     const origin = await getOrigin();
     document.getElementById('btn-open-app').href = `${origin}/settings`;
     showView('view-auth');
@@ -211,7 +211,7 @@ async function init() {
       ? truncateUrl(urlStore.botMeetingUrl)
       : '';
     showView('view-bot-active');
-    await startBotPolling(botMeetingId, authToken, origin);
+    await startBotPolling(botMeetingId, extensionToken, origin);
     return;
   }
 
@@ -235,8 +235,8 @@ document.getElementById('btn-launch-bot').addEventListener('click', async () => 
     return;
   }
 
-  const { authToken } = await chrome.storage.local.get('authToken');
-  if (!authToken) {
+  const { extensionToken } = await chrome.storage.local.get('extensionToken');
+  if (!extensionToken) {
     showView('view-auth');
     return;
   }
@@ -251,7 +251,7 @@ document.getElementById('btn-launch-bot').addEventListener('click', async () => 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${extensionToken}`,
       },
       body: JSON.stringify({ meetingUrl }),
     });
@@ -273,7 +273,7 @@ document.getElementById('btn-launch-bot').addEventListener('click', async () => 
     document.getElementById('bot-status-label').textContent = 'Joining meeting…';
     document.getElementById('btn-bot-dashboard').href = `${origin}/meetings/${meetingId}`;
     showView('view-bot-active');
-    await startBotPolling(meetingId, authToken, origin);
+    await startBotPolling(meetingId, extensionToken, origin);
   } catch {
     errorEl.textContent = 'Network error. Check your connection and try again.';
     errorEl.style.display = 'block';
