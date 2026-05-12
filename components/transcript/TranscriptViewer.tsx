@@ -164,7 +164,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
       <div
         className="rounded-2xl"
         style={{
-          background: '#0d0d22',
+          background: '#07071a',
           border: '1px solid rgba(255,255,255,0.07)',
           overflow: 'clip',
         }}

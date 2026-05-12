@@ -17,6 +17,7 @@ import {
   translateToEnglish,
   splitIntoSegments,
   transliterateToRoman,
+  detectLanguageFromScript,
 } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
@@ -84,7 +85,8 @@ async function enforceRomanInvariant(
     sample: storedText.slice(0, 40),
   });
   try {
-    const retry = await transliterateToRoman(segText, 'auto');
+    const scriptDetected = detectLanguageFromScript(segText);
+    const retry = await transliterateToRoman(segText, scriptDetected ?? 'auto');
     if (!NON_ROMAN_RE.test(retry)) return retry;
   } catch (err) {
     console.error('[pipeline] Auto-lang transliteration retry failed:', err instanceof Error ? err.message : err);
@@ -139,18 +141,15 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 
     await persistDetectedLanguage(meetingId, detectedLang);
 
-    // ── Pipeline B — STT (transcribe) with hint from A ───────────────────────
-    // For non-English: rerun STT with the detected hint to force native-script
-    // output (Sarvam without a hint can return English for code-mixed audio).
-    // For pure English: short-circuit; Pipeline A's English serves both columns.
-    const isPureEnglish = detectedLang === 'en-IN' || !detectedLang;
-    const pipelineB = isPureEnglish
-      ? pipelineA
+    // ── Pipeline B — STT (transcribe) — always runs ──────────────────────────
+    // Run unconditionally even when detectedLang === 'en-IN': Sarvam frequently
+    // misclassifies code-mixed Tanglish/Hinglish as pure English. Per-segment
+    // detectLanguageFromScript below handles truly pure-English segments cheaply.
+    const pipelineB = (detectedLang === 'en-IN' || !detectedLang)
+      ? await transcribeAudio(audioBuffer, fileName, 'transcribe')
       : await transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang);
-    if (!isPureEnglish) {
-      console.log('[pipeline] Pipeline B — native transcript length:', pipelineB.transcript?.length,
-        '| diarized:', pipelineB.diarized_entries?.length ?? 0);
-    }
+    console.log('[pipeline] Pipeline B — native transcript length:', pipelineB.transcript?.length,
+      '| diarized:', pipelineB.diarized_entries?.length ?? 0);
 
     // Speaker label resolution from B (canonical diarization timeline)
     if (pipelineB.diarized_entries?.length) {
@@ -191,15 +190,14 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // Build a timestamp index of Pipeline A entries so we can match each
     // B-segment to A's English with a ±2s tolerance window. Used only for
     // non-English meetings; pure English just reuses A's text directly.
-    const aIndex: Array<{ sec: number; text: string }> = !isPureEnglish && pipelineA.diarized_entries?.length
+    const aIndex: Array<{ sec: number; text: string }> = pipelineA.diarized_entries?.length
       ? pipelineA.diarized_entries.map((e) => {
           const raw = e as unknown as Record<string, unknown>;
           return { sec: diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
         })
       : [];
 
-    function findEnglishForSegment(startSec: number, fallbackText: string): { english: string; matched: boolean } {
-      if (isPureEnglish) return { english: fallbackText, matched: true };
+    function findEnglishForSegment(startSec: number): { english: string; matched: boolean } {
       let best: { sec: number; text: string; dist: number } | null = null;
       for (const a of aIndex) {
         const dist = Math.abs(a.sec - startSec);
@@ -209,38 +207,42 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     }
 
     // ── Per-segment processing ───────────────────────────────────────────────
-    // For non-English roman output: transliterate B's native text, find
-    // matching English from Pipeline A's diarized entries, fall back to a
-    // per-segment text translation only when no A-match falls in tolerance.
+    // Per-segment script detection handles mid-meeting language switching:
+    // each segment is checked independently so Tamil segments in an otherwise
+    // English meeting get transliterated while English segments stay as-is.
     const englishSegments: string[] = [];
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       let original: string;
       let english: string;
 
-      if (isPureEnglish) {
+      const segScriptLang = detectLanguageFromScript(seg.text);
+      const segIsEnglish = !segScriptLang && (detectedLang === 'en-IN' || !detectedLang);
+      const segLang = segScriptLang ?? detectedLang;
+
+      if (segIsEnglish) {
         original = seg.text;
         english = seg.text;
       } else if (outputScript === 'roman') {
         // English from Pipeline A (preferred) or fallback to text translation
-        const match = findEnglishForSegment(seg.startSeconds, seg.text);
+        const match = findEnglishForSegment(seg.startSeconds);
         english = match.matched
           ? match.english
-          : await translateToEnglish(seg.text, detectedLang);
+          : await translateToEnglish(seg.text, segLang);
 
         try {
-          original = await transliterateToRoman(seg.text, detectedLang);
+          original = await transliterateToRoman(seg.text, segLang);
         } catch (err) {
           console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
           original = english;
         }
-        original = await enforceRomanInvariant(seg.text, original, english, detectedLang);
+        original = await enforceRomanInvariant(seg.text, original, english, segLang);
       } else {
         // Non-roman output script — keep native, still get English from A
-        const match = findEnglishForSegment(seg.startSeconds, seg.text);
+        const match = findEnglishForSegment(seg.startSeconds);
         english = match.matched
           ? match.english
-          : await translateToEnglish(seg.text, detectedLang);
+          : await translateToEnglish(seg.text, segLang);
         original = seg.text;
       }
       englishSegments.push(english);
@@ -339,10 +341,9 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       `| chunkStart: ${chunkStartSeconds}s`
     );
 
-    // ── Pipeline B — STT (transcribe) with hint from A; skipped for pure English ──
-    const isPureEnglish = detectedLang === 'en-IN' || !detectedLang;
-    const pipelineB = isPureEnglish
-      ? pipelineA
+    // ── Pipeline B — STT (transcribe) — always runs ──────────────────────────
+    const pipelineB = (detectedLang === 'en-IN' || !detectedLang)
+      ? await transcribeAudio(audioBuffer, fileName, 'transcribe')
       : await transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang);
 
     // Build segments from B (canonical), offsetting by chunkStartSeconds
@@ -372,7 +373,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
     });
 
     // Index Pipeline A's diarized entries for ±2s timestamp matching
-    const aIndex: Array<{ sec: number; text: string }> = !isPureEnglish && pipelineA.diarized_entries?.length
+    const aIndex: Array<{ sec: number; text: string }> = pipelineA.diarized_entries?.length
       ? pipelineA.diarized_entries.map((e) => {
           const raw = e as unknown as Record<string, unknown>;
           return { sec: chunkStartSeconds + diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
@@ -391,7 +392,11 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       let original: string;
       let english: string;
 
-      if (isPureEnglish) {
+      const segScriptLang = detectLanguageFromScript(seg.text);
+      const segIsEnglish = !segScriptLang && (detectedLang === 'en-IN' || !detectedLang);
+      const segLang = segScriptLang ?? detectedLang;
+
+      if (segIsEnglish) {
         original = seg.text;
         english = seg.text;
       } else if (outputScript === 'roman') {
@@ -401,22 +406,22 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
           const dist = Math.abs(a.sec - seg.startSeconds);
           if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
         }
-        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, detectedLang);
+        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
 
         try {
-          original = await transliterateToRoman(seg.text, detectedLang);
+          original = await transliterateToRoman(seg.text, segLang);
         } catch (err) {
           console.error('[pipeline:chunk] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
           original = english;
         }
-        original = await enforceRomanInvariant(seg.text, original, english, detectedLang);
+        original = await enforceRomanInvariant(seg.text, original, english, segLang);
       } else {
         let aMatch: { sec: number; text: string; dist: number } | null = null;
         for (const a of aIndex) {
           const dist = Math.abs(a.sec - seg.startSeconds);
           if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
         }
-        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, detectedLang);
+        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
         original = seg.text;
       }
 

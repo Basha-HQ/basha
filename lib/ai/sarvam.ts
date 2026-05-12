@@ -448,6 +448,10 @@ export async function transliterateToRoman(
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
+  // Early return — if text has no Indian script characters it is already Roman
+  const NON_ROMAN = /[^\p{ASCII}\p{P}\p{Z}\p{N}À-ɏ]/u;
+  if (!NON_ROMAN.test(text)) return text;
+
   const languageMap: Record<string, string> = {
     ta: 'ta-IN',
     hi: 'hi-IN',
@@ -464,15 +468,14 @@ export async function transliterateToRoman(
     unknown: 'auto',
   };
 
-  const lang = sourceLanguage ? (languageMap[sourceLanguage] ?? sourceLanguage) : null;
+  // Detect the script language from the text when the caller passes null/'auto'
+  // so Sarvam receives a concrete language code instead of 'auto → auto'.
+  const resolvedSource = (!sourceLanguage || sourceLanguage === 'auto')
+    ? (detectLanguageFromScript(text) ?? sourceLanguage)
+    : sourceLanguage;
 
-  // When the language is unknown / 'auto', Sarvam's translate API still accepts
-  // source_language_code: 'auto' and detects from the input. Try that rather
-  // than silently returning native script (which would violate the roman
-  // invariant in the pipeline).
+  const lang = resolvedSource ? (languageMap[resolvedSource] ?? resolvedSource) : null;
   const sourceCode = !lang || lang === 'auto' ? 'auto' : lang;
-  // For target we mirror the source. With 'auto' source, Sarvam routes through
-  // its detection path and the response is romanized for the detected language.
   const targetCode = sourceCode === 'auto' ? 'auto' : sourceCode;
 
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
