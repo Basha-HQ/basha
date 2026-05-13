@@ -342,6 +342,39 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
           );
         })()}
 
+        {/* Language header — shown above segments when non-English content is present */}
+        {(() => {
+          const hasNonEnglish = transcripts.some((t) => {
+            const en = t.english_text?.trim() ?? '';
+            const og = t.original_text?.trim() ?? '';
+            return en && en.toLowerCase() !== og.toLowerCase();
+          });
+          if (!hasNonEnglish) return null;
+
+          const langName = sourceLanguage && LANG_NAMES[sourceLanguage]
+            ? LANG_NAMES[sourceLanguage].toLowerCase()
+            : null;
+          const label = langName && langName !== 'english' && langName !== 'auto'
+            ? `(${langName}+english)`
+            : '(multiple languages)';
+
+          return (
+            <div
+              className="flex justify-end px-5 pt-3"
+            >
+              <span
+                style={{
+                  fontSize: 10.5, fontWeight: 600,
+                  color: 'rgba(245,158,11,0.55)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {label}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Segments — Layout F: Soft Cards + Whisper */}
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
@@ -379,7 +412,6 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
                   isActive={seg.id === activeSegmentId}
                   isFlagged={flaggedSegmentIds?.includes(seg.id) ?? false}
                   onSeek={audioPath ? () => { seekAudioRef.current?.(displayTs); } : undefined}
-                  langBadge={langBadge ?? undefined}
                   domRef={(el) => {
                     if (fullIdx >= 0) segmentRefs.current[fullIdx] = el;
                   }}
@@ -425,7 +457,6 @@ function TranscriptRow({
   isActive,
   isFlagged,
   onSeek,
-  langBadge,
   domRef,
 }: {
   segment: TranscriptRow;
@@ -439,7 +470,6 @@ function TranscriptRow({
   isActive?: boolean;
   isFlagged?: boolean;
   onSeek?: () => void;
-  langBadge?: string;
   domRef?: (el: HTMLDivElement | null) => void;
 }) {
   const sc = segment.speaker ? getSpeakerColor(segment.speaker, speakerMap) : null;
@@ -467,12 +497,10 @@ function TranscriptRow({
   const ogText = segment.original_text?.trim() ?? '';
   const isPureEnglish = !enText || enText.toLowerCase() === ogText.toLowerCase();
 
-  // Card background: slate wash for English, speaker-tinted gradient for non-English
+  // Card background: slate wash for English, fixed warm-amber gradient for non-English
   const cardBackground = isPureEnglish
     ? 'rgba(255,255,255,0.025)'
-    : sc
-      ? `linear-gradient(180deg, ${sc.bg} 0%, rgba(13,13,34,0) 90%)`
-      : 'rgba(255,255,255,0.025)';
+    : 'linear-gradient(160deg, rgba(180,110,30,0.18) 0%, rgba(13,13,34,0) 85%)';
 
   return (
     <div
@@ -563,8 +591,8 @@ function TranscriptRow({
           </span>
         )}
 
-        {/* Language tag (only on non-English segments) — pushed to the right */}
-        {!isPureEnglish && langBadge && (
+        {/* Language dot — "mixed" for non-English segments, pushed to the right */}
+        {!isPureEnglish && (
           <span className="flex items-center" style={{ gap: 5, marginLeft: 'auto' }}>
             <span
               style={{
@@ -576,10 +604,9 @@ function TranscriptRow({
               style={{
                 fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
                 color: 'rgba(245,158,11,0.7)',
-                textTransform: 'lowercase',
               }}
             >
-              {langBadge}
+              mixed
             </span>
           </span>
         )}
@@ -593,7 +620,7 @@ function TranscriptRow({
             }`}
             style={{
               color: isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)',
-              marginLeft: !isPureEnglish && langBadge ? 4 : 'auto',
+              marginLeft: !isPureEnglish ? 4 : 'auto',
             }}
             title={isFlagged ? 'Already flagged — click to update' : 'Flag incorrect transcript'}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#fb7185')}

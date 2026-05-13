@@ -112,8 +112,11 @@ export async function generateMeetingTitle(summary: MeetingSummary): Promise<str
   const prompt = `Based on this meeting summary:
 ${context}
 
-Write a short, specific meeting title (4-8 words). No quotes, no punctuation at the end.
-Examples: Q2 Product Roadmap Planning, Marketing Campaign Budget Review, Engineering Sprint Retrospective
+Write a short, specific meeting title. Rules:
+- Exactly 3 to 6 words
+- Every word separated by a single space (no joined or concatenated words)
+- Title case, no quotes, no punctuation at the end
+Examples: Q2 Product Roadmap Planning, Marketing Budget Review, Engineering Sprint Retrospective
 
 Respond with only the title, nothing else.`;
 
@@ -142,11 +145,12 @@ Respond with only the title, nothing else.`;
     const title = raw
       .replace(/^["'`]|["'`]$/g, '') // strip surrounding quotes
       .replace(/[.!?]+$/, '')         // strip trailing punctuation
+      .replace(/\s{2,}/g, ' ')        // collapse double-spaces
       .trim();
 
     // Sanity check: reject if too long (model hallucinated) or empty
     const wordCount = title.split(/\s+/).filter(Boolean).length;
-    if (!title || wordCount < 2 || wordCount > 12) return '';
+    if (!title || wordCount < 2 || wordCount > 6) return '';
     return title;
   } catch (err) {
     console.warn('[summarize] generateMeetingTitle error:', err);

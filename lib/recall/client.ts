@@ -25,6 +25,12 @@ export interface RecallRecording {
   };
 }
 
+export interface RecallTranscriptSegment {
+  speaker: string;
+  start_time: number;
+  end_time: number;
+}
+
 export interface RecallBot {
   id: string;
   meeting_url: string;
@@ -105,6 +111,46 @@ export async function deleteBot(recallBotId: string): Promise<void> {
   if (!res.ok && res.status !== 404) {
     const text = await res.text();
     throw new Error(`Recall.ai deleteBot failed: ${res.status} ${text}`);
+  }
+}
+
+/**
+ * Download and parse a Recall.ai transcript from a signed URL.
+ * Returns an array of segments with real participant names and timestamps.
+ * Returns [] on any error so callers can safely skip naming.
+ *
+ * Recall.ai transcript format (words-level):
+ *   [ { speaker: "Name", words: [{text, start_time, end_time, ...}] }, ... ]
+ * We flatten each word entry into a segment span keyed by speaker.
+ */
+export async function fetchRecallTranscript(url: string): Promise<RecallTranscriptSegment[]> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw: any[] = await res.json();
+    if (!Array.isArray(raw)) return [];
+
+    const segments: RecallTranscriptSegment[] = [];
+
+    for (const entry of raw) {
+      const speaker: string = entry?.speaker ?? entry?.participant?.name ?? '';
+      if (!speaker) continue;
+
+      // Each entry has either `words` array (word-level) or direct start/end
+      if (Array.isArray(entry.words) && entry.words.length > 0) {
+        const start = entry.words[0]?.start_time ?? entry.words[0]?.offset?.start ?? 0;
+        const end = entry.words[entry.words.length - 1]?.end_time ?? entry.words[entry.words.length - 1]?.offset?.end ?? start;
+        segments.push({ speaker, start_time: Number(start), end_time: Number(end) });
+      } else if (entry.start_time != null && entry.end_time != null) {
+        segments.push({ speaker, start_time: Number(entry.start_time), end_time: Number(entry.end_time) });
+      }
+    }
+
+    return segments;
+  } catch {
+    return [];
   }
 }
 

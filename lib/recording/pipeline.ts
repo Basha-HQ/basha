@@ -269,7 +269,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // Fallback: extract first 7 words of overview when AI title generation fails
     const effectiveTitle = aiTitle ||
       (summary.overview
-        ? summary.overview.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 7).join(' ')
+        ? summary.overview.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 6).join(' ')
         : null);
 
     // 6. Mark completed — also persist the detected language so meeting cards can show it

@@ -8,7 +8,7 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { getRecordingUrl, type RecallBot } from '@/lib/recall/client';
+import { getRecordingUrl, fetchRecallTranscript, type RecallBot } from '@/lib/recall/client';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
 import { sendBotFailureEmail } from '@/lib/email';
 
@@ -75,6 +75,57 @@ export async function handleRecordingReady(
       sourceLanguage: meeting?.source_language ?? 'auto',
       speakingLanguage: userPrefs?.speaking_language ?? undefined,
     });
+
+    // 6. Auto-assign real participant names from Recall.ai transcript.
+    //    Recall.ai's transcript has real names + timestamps; Sarvam gives us
+    //    SPEAKER_XX IDs + timestamps. We cross-reference by timestamp to map
+    //    SPEAKER_XX → "Real Name" and save to meetings.speaker_labels.
+    const transcriptUrl = recallBot.recordings?.[0]
+      ?.media_shortcuts?.transcript?.data?.download_url;
+    if (transcriptUrl) {
+      try {
+        const recallSegments = await fetchRecallTranscript(transcriptUrl);
+        if (recallSegments.length > 0) {
+          const savedRows = await query<{ speaker: string; timestamp_seconds: number }>(
+            `SELECT speaker, timestamp_seconds FROM transcripts
+             WHERE meeting_id = $1 AND speaker IS NOT NULL
+             ORDER BY segment_index`,
+            [bot.meeting_id]
+          );
+
+          // Tally: SPEAKER_XX → { "Name": voteCount }
+          const tally: Record<string, Record<string, number>> = {};
+          for (const row of savedRows) {
+            const ts = row.timestamp_seconds ?? 0;
+            // Find the Recall.ai segment active at this timestamp (±2s tolerance)
+            const match = recallSegments.find(
+              (s) => ts >= s.start_time - 2 && ts <= s.end_time + 2
+            );
+            if (!match?.speaker) continue;
+            if (!tally[row.speaker]) tally[row.speaker] = {};
+            tally[row.speaker][match.speaker] = (tally[row.speaker][match.speaker] ?? 0) + 1;
+          }
+
+          // Pick majority-vote name for each SPEAKER_XX
+          const speakerLabels: Record<string, string> = {};
+          for (const [speakerId, votes] of Object.entries(tally)) {
+            const name = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]?.[0];
+            if (name) speakerLabels[speakerId] = name;
+          }
+
+          if (Object.keys(speakerLabels).length > 0) {
+            await query(
+              `UPDATE meetings SET speaker_labels = $1 WHERE id = $2`,
+              [JSON.stringify(speakerLabels), bot.meeting_id]
+            );
+            console.log(`[bot-pipeline] Speaker labels set from Recall.ai:`, speakerLabels);
+          }
+        }
+      } catch (err) {
+        // Non-fatal — transcript naming is best-effort
+        console.warn('[bot-pipeline] Recall.ai speaker naming failed:', err);
+      }
+    }
 
     await query(
       `UPDATE bots SET status = 'completed', updated_at = NOW() WHERE id = $1`,
