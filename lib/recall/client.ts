@@ -31,6 +31,33 @@ export interface RecallTranscriptSegment {
   end_time: number;
 }
 
+/**
+ * One participant returned by GET /bot/{id}/meeting_participants/.
+ * `events` lists every active_speaker / join / leave action with timestamps;
+ * we use the speaking windows derived from this to map names to timestamps.
+ */
+export interface RecallMeetingParticipant {
+  id: number;
+  name: string;
+  is_host?: boolean;
+  events: Array<{
+    action: string;
+    created_at: string;
+    // For active_speaker events: { value: true } means speaking started, false ended
+    value?: unknown;
+  }>;
+}
+
+/**
+ * Speaking window derived from a participant's active_speaker events,
+ * expressed as seconds offset from bot.join_at (recording start).
+ */
+export interface SpeakingWindow {
+  name: string;
+  start_seconds: number;
+  end_seconds: number;
+}
+
 export interface RecallBot {
   id: string;
   meeting_url: string;
@@ -64,9 +91,24 @@ export async function createBot(
   botName = 'Basha Bot',
   webhookUrl?: string
 ): Promise<RecallBot> {
+  // recording_config tells Recall.ai to:
+  //  - capture an audio recording (audio_mixed) — needed for Sarvam STT
+  //  - run its built-in transcription (meeting_captions provider) — gives us
+  //    real participant names + timestamps used to auto-name speakers in our
+  //    transcript without any user interaction
+  //  - emit participant_events — backup signal for "who was active speaker"
   const body: Record<string, unknown> = {
     meeting_url: meetingUrl,
     bot_name: botName,
+    recording_config: {
+      audio_mixed_raw: {},
+      transcript: {
+        provider: {
+          meeting_captions: {},
+        },
+      },
+      participant_events: {},
+    },
   };
   if (webhookUrl) {
     body.webhook_url = webhookUrl;
@@ -154,12 +196,87 @@ export async function fetchRecallTranscript(url: string): Promise<RecallTranscri
   }
 }
 
+/**
+ * Fetch all meeting participants for a bot, including their event timeline.
+ * Returns [] on any error so callers can fall back gracefully.
+ */
+export async function fetchMeetingParticipants(recallBotId: string): Promise<RecallMeetingParticipant[]> {
+  try {
+    const res = await fetch(`${getBase()}/bot/${recallBotId}/meeting_participants/`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    // API may return either { results: [...] } or a raw array
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const list: any[] = Array.isArray(json) ? json : json.results ?? [];
+    return list.map((p) => ({
+      id: p.id,
+      name: p.name ?? '',
+      is_host: p.is_host,
+      events: Array.isArray(p.events) ? p.events : [],
+    })).filter((p) => p.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Convert a participant's `active_speaker` event stream into speaking windows
+ * relative to the recording start (`recordingStartIso`).
+ *
+ * Recall.ai emits paired events: `{action:"active_speaker", value:true}` when
+ * someone starts speaking, and `{value:false}` (or another start) when they stop.
+ */
+export function deriveSpeakingWindows(
+  participants: RecallMeetingParticipant[],
+  recordingStartIso: string
+): SpeakingWindow[] {
+  const startMs = new Date(recordingStartIso).getTime();
+  if (!Number.isFinite(startMs)) return [];
+
+  const windows: SpeakingWindow[] = [];
+  for (const p of participants) {
+    let openStart: number | null = null;
+    for (const ev of p.events) {
+      if (ev.action !== 'active_speaker') continue;
+      const t = (new Date(ev.created_at).getTime() - startMs) / 1000;
+      if (!Number.isFinite(t)) continue;
+
+      if (ev.value === true || ev.value === 'true') {
+        if (openStart === null) openStart = t;
+      } else if (ev.value === false || ev.value === 'false') {
+        if (openStart !== null) {
+          windows.push({ name: p.name, start_seconds: openStart, end_seconds: t });
+          openStart = null;
+        }
+      }
+    }
+    // If a window never closed (recording ended while speaking), close it loosely
+    if (openStart !== null) {
+      windows.push({ name: p.name, start_seconds: openStart, end_seconds: openStart + 60 });
+    }
+  }
+  return windows;
+}
+
 // ── Status helpers ────────────────────────────────────────────────────────────
 
 /** Get the latest status code from a Recall.ai bot response. */
 export function getLatestStatus(bot: RecallBot): string {
   const changes = bot.status_changes ?? [];
   return changes.length > 0 ? changes[changes.length - 1].code : 'unknown';
+}
+
+/**
+ * Find when the bot started recording — the ISO timestamp of the first
+ * `in_call_recording` status change. Returns null if recording never started.
+ * Used to convert absolute participant event timestamps into seconds-from-start.
+ */
+export function getRecordingStartIso(bot: RecallBot): string | null {
+  const first = (bot.status_changes ?? []).find((c) => c.code === 'in_call_recording');
+  return first?.created_at ?? null;
 }
 
 /**

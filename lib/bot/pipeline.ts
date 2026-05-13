@@ -8,7 +8,15 @@
  */
 
 import { query, queryOne } from '@/lib/db';
-import { getRecordingUrl, fetchRecallTranscript, type RecallBot } from '@/lib/recall/client';
+import {
+  getRecordingUrl,
+  fetchRecallTranscript,
+  fetchMeetingParticipants,
+  deriveSpeakingWindows,
+  getRecordingStartIso,
+  type RecallBot,
+  type SpeakingWindow,
+} from '@/lib/recall/client';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
 import { sendBotFailureEmail } from '@/lib/email';
 
@@ -76,37 +84,79 @@ export async function handleRecordingReady(
       speakingLanguage: userPrefs?.speaking_language ?? undefined,
     });
 
-    // 6. Auto-assign real participant names from Recall.ai transcript.
-    //    Recall.ai's transcript has real names + timestamps; Sarvam gives us
-    //    SPEAKER_XX IDs + timestamps. We cross-reference by timestamp to map
-    //    SPEAKER_XX → "Real Name" and save to meetings.speaker_labels.
-    const transcriptUrl = recallBot.recordings?.[0]
-      ?.media_shortcuts?.transcript?.data?.download_url;
-    if (transcriptUrl) {
-      try {
-        const recallSegments = await fetchRecallTranscript(transcriptUrl);
-        if (recallSegments.length > 0) {
-          const savedRows = await query<{ speaker: string; timestamp_seconds: number }>(
-            `SELECT speaker, timestamp_seconds FROM transcripts
-             WHERE meeting_id = $1 AND speaker IS NOT NULL
-             ORDER BY segment_index`,
-            [bot.meeting_id]
-          );
+    // 6. Auto-assign real participant names from Recall.ai.
+    //    Sarvam gives us SPEAKER_XX IDs + timestamps; Recall.ai knows the actual
+    //    participant names and when each one was the active speaker.
+    //    Strategy: try the transcript first (most precise), then fall back to
+    //    participant event windows (active_speaker timeline). Either way, we
+    //    cross-reference timestamps against our saved transcripts and assign
+    //    the majority-vote name per SPEAKER_XX.
+    try {
+      const savedRows = await query<{ speaker: string; timestamp_seconds: number }>(
+        `SELECT speaker, timestamp_seconds FROM transcripts
+         WHERE meeting_id = $1 AND speaker IS NOT NULL
+         ORDER BY segment_index`,
+        [bot.meeting_id]
+      );
 
+      if (savedRows.length > 0) {
+        // Build speaking windows: prefer transcript (word-aligned), else
+        // participant active_speaker events.
+        let speakingWindows: SpeakingWindow[] = [];
+        const transcriptUrl = recallBot.recordings?.[0]
+          ?.media_shortcuts?.transcript?.data?.download_url;
+        if (transcriptUrl) {
+          const recallSegments = await fetchRecallTranscript(transcriptUrl);
+          speakingWindows = recallSegments.map((s) => ({
+            name: s.speaker,
+            start_seconds: s.start_time,
+            end_seconds: s.end_time,
+          }));
+          console.log(`[bot-pipeline] Recall.ai transcript: ${speakingWindows.length} segments`);
+        }
+
+        if (speakingWindows.length === 0 && bot.recall_bot_id) {
+          // Fallback — participant events
+          const participants = await fetchMeetingParticipants(bot.recall_bot_id);
+          const recordingStart = getRecordingStartIso(recallBot);
+          if (recordingStart && participants.length > 0) {
+            speakingWindows = deriveSpeakingWindows(participants, recordingStart);
+            console.log(`[bot-pipeline] Participant events: ${participants.length} participants, ${speakingWindows.length} windows`);
+          }
+        }
+
+        if (speakingWindows.length > 0) {
           // Tally: SPEAKER_XX → { "Name": voteCount }
           const tally: Record<string, Record<string, number>> = {};
           for (const row of savedRows) {
             const ts = row.timestamp_seconds ?? 0;
-            // Find the Recall.ai segment active at this timestamp (±2s tolerance)
-            const match = recallSegments.find(
-              (s) => ts >= s.start_time - 2 && ts <= s.end_time + 2
+            // Pick the speaking window covering this timestamp (±2s slack)
+            const match = speakingWindows.find(
+              (w) => ts >= w.start_seconds - 2 && ts <= w.end_seconds + 2
             );
-            if (!match?.speaker) continue;
+            if (!match?.name) continue;
             if (!tally[row.speaker]) tally[row.speaker] = {};
-            tally[row.speaker][match.speaker] = (tally[row.speaker][match.speaker] ?? 0) + 1;
+            tally[row.speaker][match.name] = (tally[row.speaker][match.name] ?? 0) + 1;
           }
 
-          // Pick majority-vote name for each SPEAKER_XX
+          // For SPEAKER_XX with no timestamp matches at all, fall back to the
+          // single most-active participant overall — covers cases where multiple
+          // Sarvam speakers share one mic (e.g. notetaker + nearby person).
+          const allRowSpeakers = Array.from(new Set(savedRows.map((r) => r.speaker)));
+          if (allRowSpeakers.some((s) => !tally[s])) {
+            const overall: Record<string, number> = {};
+            for (const w of speakingWindows) {
+              const dur = Math.max(1, w.end_seconds - w.start_seconds);
+              overall[w.name] = (overall[w.name] ?? 0) + dur;
+            }
+            const topName = Object.entries(overall).sort((a, b) => b[1] - a[1])[0]?.[0];
+            if (topName) {
+              for (const s of allRowSpeakers) {
+                if (!tally[s]) tally[s] = { [topName]: 1 };
+              }
+            }
+          }
+
           const speakerLabels: Record<string, string> = {};
           for (const [speakerId, votes] of Object.entries(tally)) {
             const name = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -119,12 +169,16 @@ export async function handleRecordingReady(
               [JSON.stringify(speakerLabels), bot.meeting_id]
             );
             console.log(`[bot-pipeline] Speaker labels set from Recall.ai:`, speakerLabels);
+          } else {
+            console.warn('[bot-pipeline] No speaker label matches produced — keeping fallback labels');
           }
+        } else {
+          console.warn('[bot-pipeline] No Recall.ai speaking data available (transcript + participants both empty)');
         }
-      } catch (err) {
-        // Non-fatal — transcript naming is best-effort
-        console.warn('[bot-pipeline] Recall.ai speaker naming failed:', err);
       }
+    } catch (err) {
+      // Non-fatal — naming is best-effort
+      console.warn('[bot-pipeline] Recall.ai speaker naming failed:', err);
     }
 
     await query(

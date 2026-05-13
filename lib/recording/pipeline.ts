@@ -117,7 +117,7 @@ export interface ProcessingInput {
 }
 
 export async function processAudioForMeeting(input: ProcessingInput): Promise<void> {
-  const { meetingId, audioBuffer, fileName, outputScript = 'roman' } = input;
+  const { meetingId, audioBuffer, fileName, outputScript = 'roman', speakingLanguage } = input;
 
   await query(
     `UPDATE meetings SET status = 'processing' WHERE id = $1`,
@@ -217,12 +217,27 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       let english: string;
 
       const segScriptLang = detectLanguageFromScript(seg.text);
-      const segIsEnglish = !segScriptLang && (detectedLang === 'en-IN' || !detectedLang);
-      const segLang = segScriptLang ?? detectedLang;
+      // If the user's profile speaking_language is non-English, treat Latin-script
+      // segments as potentially Romanized native text (Tanglish/Hinglish) — Sarvam
+      // often misclassifies these as pure English at the audio level.
+      const userPrefsNonEnglish = !!speakingLanguage && speakingLanguage !== 'en' && speakingLanguage !== 'en-IN';
+      const segIsEnglish = !segScriptLang
+        && (detectedLang === 'en-IN' || !detectedLang)
+        && !userPrefsNonEnglish;
+      const segLang = segScriptLang ?? (userPrefsNonEnglish ? speakingLanguage : detectedLang);
 
       if (segIsEnglish) {
+        // Even when classified English, Pipeline A may have produced a different
+        // English translation — that's a signal the source was actually non-English
+        // (Sarvam translate succeeded but Sarvam STT-language-detection misclassified).
+        const aMatch = findEnglishForSegment(seg.startSeconds);
+        const aText = aMatch.matched ? aMatch.english.trim() : '';
+        const ogText = seg.text.trim();
+        const differs = aText.length > 0
+          && aText.toLowerCase() !== ogText.toLowerCase()
+          && Math.abs(aText.length - ogText.length) > 3;
         original = seg.text;
-        english = seg.text;
+        english = differs ? aMatch.english : seg.text;
       } else if (outputScript === 'roman') {
         // English from Pipeline A (preferred) or fallback to text translation
         const match = findEnglishForSegment(seg.startSeconds);
@@ -272,14 +287,27 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
         ? summary.overview.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 6).join(' ')
         : null);
 
-    // 6. Mark completed — also persist the detected language so meeting cards can show it
+    // 6. Mark completed — also persist the detected language so meeting cards can show it.
+    //    Prefer the user's profile speaking_language over a suspect 'en-IN' detection,
+    //    since Sarvam frequently misclassifies code-mixed Tanglish/Hinglish audio.
+    let effectiveLanguage = detectedLang;
+    if (
+      (detectedLang === 'en-IN' || !detectedLang) &&
+      speakingLanguage &&
+      speakingLanguage !== 'en' &&
+      speakingLanguage !== 'en-IN' &&
+      speakingLanguage !== 'auto'
+    ) {
+      effectiveLanguage = /-/.test(speakingLanguage) ? speakingLanguage : `${speakingLanguage}-IN`;
+    }
+
     await query(
       `UPDATE meetings
        SET status = 'completed', summary = $1, source_language = $3, completed_at = NOW()${effectiveTitle ? ', title = $4' : ''}
        WHERE id = $2`,
       effectiveTitle
-        ? [JSON.stringify(summary), meetingId, detectedLang, effectiveTitle]
-        : [JSON.stringify(summary), meetingId, detectedLang]
+        ? [JSON.stringify(summary), meetingId, effectiveLanguage, effectiveTitle]
+        : [JSON.stringify(summary), meetingId, effectiveLanguage]
     );
 
     console.log(`[pipeline] Processing complete for meeting ${meetingId}`);
@@ -321,7 +349,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 export async function processAudioChunk(input: ChunkInput): Promise<void> {
   const {
     meetingId, audioBuffer, fileName, chunkStartSeconds,
-    outputScript = 'roman', isFinal, duration,
+    outputScript = 'roman', isFinal, duration, speakingLanguage,
   } = input;
 
   // Only run STT if the chunk has meaningful audio (very small blobs = silence / empty tail)
@@ -393,19 +421,33 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       let english: string;
 
       const segScriptLang = detectLanguageFromScript(seg.text);
-      const segIsEnglish = !segScriptLang && (detectedLang === 'en-IN' || !detectedLang);
-      const segLang = segScriptLang ?? detectedLang;
+      // If the user's profile speaking_language is non-English, treat Latin-script
+      // segments as potentially Romanized native text (Tanglish/Hinglish) — Sarvam
+      // often misclassifies these as pure English at the audio level.
+      const userPrefsNonEnglish = !!speakingLanguage && speakingLanguage !== 'en' && speakingLanguage !== 'en-IN';
+      const segIsEnglish = !segScriptLang
+        && (detectedLang === 'en-IN' || !detectedLang)
+        && !userPrefsNonEnglish;
+      const segLang = segScriptLang ?? (userPrefsNonEnglish ? speakingLanguage : detectedLang);
+
+      // Find closest A-segment by timestamp (±2s) — shared across branches below
+      let aMatch: { sec: number; text: string; dist: number } | null = null;
+      for (const a of aIndex) {
+        const dist = Math.abs(a.sec - seg.startSeconds);
+        if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
+      }
 
       if (segIsEnglish) {
+        // Even when classified English, Pipeline A may have produced a different
+        // English translation — that's a signal the source was actually non-English.
+        const aText = aMatch ? aMatch.text.trim() : '';
+        const ogText = seg.text.trim();
+        const differs = aText.length > 0
+          && aText.toLowerCase() !== ogText.toLowerCase()
+          && Math.abs(aText.length - ogText.length) > 3;
         original = seg.text;
-        english = seg.text;
+        english = differs ? aMatch!.text : seg.text;
       } else if (outputScript === 'roman') {
-        // English: closest A-segment by timestamp; fall back to text translation
-        let aMatch: { sec: number; text: string; dist: number } | null = null;
-        for (const a of aIndex) {
-          const dist = Math.abs(a.sec - seg.startSeconds);
-          if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
-        }
         english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
 
         try {
@@ -416,11 +458,6 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
         }
         original = await enforceRomanInvariant(seg.text, original, english, segLang);
       } else {
-        let aMatch: { sec: number; text: string; dist: number } | null = null;
-        for (const a of aIndex) {
-          const dist = Math.abs(a.sec - seg.startSeconds);
-          if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
-        }
         english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
         original = seg.text;
       }
