@@ -118,12 +118,16 @@ export interface ProcessingInput {
 
 export async function processAudioForMeeting(input: ProcessingInput): Promise<void> {
   const { meetingId, audioBuffer, fileName, outputScript = 'roman', speakingLanguage } = input;
+  const pipelineStart = Date.now();
+  console.log(`[pipeline] Starting pipeline for meeting ${meetingId} — file: ${fileName}, size: ${(audioBuffer.byteLength / 1024).toFixed(0)}KB`);
 
+  console.log(`[pipeline] Meeting ${meetingId} status → processing`);
   await query(
     `UPDATE meetings SET status = 'processing' WHERE id = $1`,
     [meetingId]
   );
 
+  let step = 'init';
   try {
     // ── Pipeline A — STT-translate ────────────────────────────────────────────
     // Sarvam's /speech-to-text-translate auto-detects the spoken language from
@@ -224,7 +228,15 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       const segIsEnglish = !segScriptLang
         && (detectedLang === 'en-IN' || !detectedLang)
         && !userPrefsNonEnglish;
-      const segLang = segScriptLang ?? (userPrefsNonEnglish ? speakingLanguage : detectedLang);
+      // When Sarvam detected a non-English language for the whole audio, Latin-script
+      // segments (Tanglish/Hinglish code-mixing) inherit that language so they get
+      // translated rather than silently skipped.
+      const isKnownNonEnglish = !!detectedLang && detectedLang !== 'unknown' && detectedLang !== 'en-IN' && detectedLang !== 'en';
+      const segLang = segScriptLang ?? (isKnownNonEnglish ? detectedLang : (userPrefsNonEnglish ? speakingLanguage : detectedLang));
+      if (i % 10 === 0) {
+        const action = segIsEnglish ? 'english-pass' : outputScript === 'roman' ? 'translit+translate' : 'translate-native';
+        console.log(`[pipeline] Segment ${i + 1}/${segments.length} — lang: ${segLang ?? 'null'}, script: ${segScriptLang ?? 'latin'}, action: ${action}`);
+      }
 
       if (segIsEnglish) {
         // Even when classified English, Pipeline A may have produced a different
@@ -245,13 +257,19 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
           ? match.english
           : await translateToEnglish(seg.text, segLang);
 
-        try {
-          original = await transliterateToRoman(seg.text, segLang);
-        } catch (err) {
-          console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
-          original = english;
+        // Skip transliteration when segment is already Roman or language is unknown/English
+        const skipTranslit = !segLang || segLang === 'en-IN' || segLang === 'en' || segLang === 'unknown';
+        if (skipTranslit) {
+          original = seg.text;
+        } else {
+          try {
+            original = await transliterateToRoman(seg.text, segLang);
+          } catch (err) {
+            console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
+            original = english;
+          }
+          original = await enforceRomanInvariant(seg.text, original, english, segLang);
         }
-        original = await enforceRomanInvariant(seg.text, original, english, segLang);
       } else {
         // Non-roman output script — keep native, still get English from A
         const match = findEnglishForSegment(seg.startSeconds);
@@ -271,7 +289,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       );
     }
 
+    console.log(`[pipeline] Inserted ${segments.length} transcript segments for meeting ${meetingId}`);
+
     // 4. Fetch title for summary context
+    step = 'summary';
     const meeting = await queryOne<{ title: string }>(
       'SELECT title FROM meetings WHERE id = $1',
       [meetingId]
@@ -286,6 +307,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       (summary.overview
         ? summary.overview.replace(/\s+/g, ' ').trim().split(/\s+/).slice(0, 6).join(' ')
         : null);
+    console.log(`[pipeline] Summary generated — topics: ${summary.topics.length}, decisions: ${summary.decisions.length}, title: "${effectiveTitle ?? '(none)'}"`);
 
     // 6. Mark completed — also persist the detected language so meeting cards can show it.
     //    Prefer the user's profile speaking_language over a suspect 'en-IN' detection,
@@ -301,6 +323,8 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       effectiveLanguage = /-/.test(speakingLanguage) ? speakingLanguage : `${speakingLanguage}-IN`;
     }
 
+    step = 'db-complete';
+    console.log(`[pipeline] Meeting ${meetingId} status → completed`);
     await query(
       `UPDATE meetings
        SET status = 'completed', summary = $1, source_language = $3, completed_at = NOW()${effectiveTitle ? ', title = $4' : ''}
@@ -310,14 +334,13 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
         : [JSON.stringify(summary), meetingId, effectiveLanguage]
     );
 
-    console.log(`[pipeline] Processing complete for meeting ${meetingId}`);
-
     // 7. Send "transcript ready" email with full summary embedded
     const userRow = await queryOne<{ email: string; name: string }>(
       `SELECT u.email, u.name FROM users u JOIN meetings m ON m.user_id = u.id WHERE m.id = $1`,
       [meetingId]
     ).catch(() => null);
     if (userRow) {
+      console.log(`[pipeline] Sending transcript-ready email to ${userRow.email}`);
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
       sendTranscriptReadyEmail(
         userRow.email,
@@ -327,9 +350,11 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
         `${appUrl}/meetings/${meetingId}`
       ).catch(console.error); // fire-and-forget — never block the pipeline
     }
+
+    console.log(`[pipeline] Pipeline complete for meeting ${meetingId} — total time: ${((Date.now() - pipelineStart) / 1000).toFixed(1)}s`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[pipeline] Processing error:', msg);
+    console.error(`[pipeline] Pipeline failed for meeting ${meetingId} at step "${step}": ${msg}`);
     await query(
       `UPDATE meetings SET status = 'failed' WHERE id = $1`,
       [meetingId]
@@ -351,6 +376,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
     meetingId, audioBuffer, fileName, chunkStartSeconds,
     outputScript = 'roman', isFinal, duration, speakingLanguage,
   } = input;
+  console.log(`[pipeline:chunk] Starting chunk for meeting ${meetingId} — file: ${fileName}, size: ${(audioBuffer.byteLength / 1024).toFixed(0)}KB, start: ${chunkStartSeconds}s, isFinal: ${isFinal}`);
 
   // Only run STT if the chunk has meaningful audio (very small blobs = silence / empty tail)
   const MIN_AUDIO_BYTES = 5_000;
@@ -421,14 +447,16 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       let english: string;
 
       const segScriptLang = detectLanguageFromScript(seg.text);
-      // If the user's profile speaking_language is non-English, treat Latin-script
-      // segments as potentially Romanized native text (Tanglish/Hinglish) — Sarvam
-      // often misclassifies these as pure English at the audio level.
       const userPrefsNonEnglish = !!speakingLanguage && speakingLanguage !== 'en' && speakingLanguage !== 'en-IN';
       const segIsEnglish = !segScriptLang
         && (detectedLang === 'en-IN' || !detectedLang)
         && !userPrefsNonEnglish;
-      const segLang = segScriptLang ?? (userPrefsNonEnglish ? speakingLanguage : detectedLang);
+      const isKnownNonEnglish = !!detectedLang && detectedLang !== 'unknown' && detectedLang !== 'en-IN' && detectedLang !== 'en';
+      const segLang = segScriptLang ?? (isKnownNonEnglish ? detectedLang : (userPrefsNonEnglish ? speakingLanguage : detectedLang));
+      if (i % 10 === 0) {
+        const action = segIsEnglish ? 'english-pass' : outputScript === 'roman' ? 'translit+translate' : 'translate-native';
+        console.log(`[pipeline:chunk] Segment ${i + 1}/${dedupedChunk.length} — lang: ${segLang ?? 'null'}, script: ${segScriptLang ?? 'latin'}, action: ${action}`);
+      }
 
       // Find closest A-segment by timestamp (±2s) — shared across branches below
       let aMatch: { sec: number; text: string; dist: number } | null = null;
@@ -450,13 +478,18 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       } else if (outputScript === 'roman') {
         english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
 
-        try {
-          original = await transliterateToRoman(seg.text, segLang);
-        } catch (err) {
-          console.error('[pipeline:chunk] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
-          original = english;
+        const skipTranslit = !segLang || segLang === 'en-IN' || segLang === 'en' || segLang === 'unknown';
+        if (skipTranslit) {
+          original = seg.text;
+        } else {
+          try {
+            original = await transliterateToRoman(seg.text, segLang);
+          } catch (err) {
+            console.error('[pipeline:chunk] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
+            original = english;
+          }
+          original = await enforceRomanInvariant(seg.text, original, english, segLang);
         }
-        original = await enforceRomanInvariant(seg.text, original, english, segLang);
       } else {
         english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
         original = seg.text;
@@ -470,6 +503,8 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
         [meetingId, indexOffset + i, seg.startSeconds, original, english, seg.speaker]
       );
     }
+
+    console.log(`[pipeline:chunk] Inserted ${dedupedChunk.length} transcript segments for meeting ${meetingId} (offset: ${indexOffset})`);
 
     // Persist source_language (for downstream UI / language badge) if not set
     if (detectedLang) {
@@ -486,6 +521,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
   if (!isFinal) return;
 
   // ── Final chunk: generate summary and mark completed ──────────────────────
+  console.log(`[pipeline:chunk] Final chunk — generating summary for meeting ${meetingId}`);
   if (duration != null) {
     await query(`UPDATE meetings SET status = 'processing', duration = $1 WHERE id = $2`, [duration, meetingId]);
   } else {
@@ -533,6 +569,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
     [meetingId]
   ).catch(() => null);
   if (userRow) {
+    console.log(`[pipeline:chunk] Sending transcript-ready email to ${userRow.email}`);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
     sendTranscriptReadyEmail(
       userRow.email,

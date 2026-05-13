@@ -46,6 +46,7 @@ Respond in this exact JSON format:
 
 Be concise. The overview must be 1–2 sentences. If a section has no content, use an empty array.`;
 
+  console.log(`[summarize] Generating summary — transcript length: ${englishTranscript.length}`);
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -74,10 +75,12 @@ Be concise. The overview must be 1–2 sentences. If a section has no content, u
   // Extract JSON from the response (model may wrap it in markdown)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
+    console.error(`[summarize] Failed to parse JSON — raw response: "${text.slice(0, 300)}"`);
     throw new Error('Could not parse summary JSON from model response');
   }
 
   const parsed = JSON.parse(jsonMatch[0]);
+  console.log(`[summarize] Summary parsed — topics: ${parsed.topics?.length ?? 0}, decisions: ${parsed.decisions?.length ?? 0}`);
 
   return {
     overview: typeof parsed.overview === 'string' && parsed.overview.trim()
@@ -121,6 +124,7 @@ Examples: Q2 Product Roadmap Planning, Marketing Budget Review, Engineering Spri
 Respond with only the title, nothing else.`;
 
   try {
+    console.log('[summarize] Generating meeting title');
     const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -151,6 +155,7 @@ Respond with only the title, nothing else.`;
     // Sanity check: reject if too long (model hallucinated) or empty
     const wordCount = title.split(/\s+/).filter(Boolean).length;
     if (!title || wordCount < 2 || wordCount > 6) return '';
+    console.log(`[summarize] Title generated: "${title}"`);
     return title;
   } catch (err) {
     console.warn('[summarize] generateMeetingTitle error:', err);

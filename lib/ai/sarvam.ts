@@ -80,6 +80,7 @@ async function transcribeAudioBatch(
   const headers = { 'api-subscription-key': apiKey, 'Content-Type': 'application/json' };
 
   // Step 1: Initiate job
+  console.log(`[sarvam] Submitting batch job for ${fileName} — mode: ${sttMode}, lang: ${languageCode ?? 'auto'}`);
   const initRes = await fetch(BATCH_STT_BASE, {
     method: 'POST',
     headers,
@@ -164,8 +165,11 @@ async function transcribeAudioBatch(
   };
   let completedStatus: StatusResponse | null = null;
   const pollDeadline = Date.now() + 10 * 60 * 1000;
+  const pollStart = Date.now();
+  let pollCount = 0;
   while (Date.now() < pollDeadline) {
     await new Promise((r) => setTimeout(r, 5000));
+    pollCount++;
 
     const statusRes = await fetch(`${BATCH_STT_BASE}/${job_id}/status`, {
       headers: { 'api-subscription-key': apiKey },
@@ -173,11 +177,15 @@ async function transcribeAudioBatch(
     if (!statusRes.ok) continue;
 
     const statusData = (await statusRes.json()) as StatusResponse;
+    if (pollCount % 2 === 0) {
+      console.log(`[sarvam] Batch job ${job_id} — state: ${statusData.job_state} (elapsed: ${Math.round((Date.now() - pollStart) / 1000)}s)`);
+    }
     if (statusData.job_state === 'Completed') {
       completedStatus = statusData;
       break;
     }
     if (statusData.job_state === 'Failed') {
+      console.error(`[sarvam] Batch job ${job_id} failed`);
       throw new Error('Sarvam batch job failed');
     }
   }
@@ -408,6 +416,8 @@ export async function translateToEnglish(
     mode: 'formal',
   };
 
+  const t0Translation = Date.now();
+  console.log(`[sarvam] Translating (${sourceLang} → en-IN): "${text.slice(0, 60)}"`);
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',
     headers: {
@@ -434,6 +444,7 @@ export async function translateToEnglish(
   }
 
   const data: SarvamTranslationResponse = await response.json();
+  console.log(`[sarvam] Translation done in ${Date.now() - t0Translation}ms`);
   return data.translated_text;
 }
 
@@ -478,6 +489,8 @@ export async function transliterateToRoman(
   const sourceCode = !lang || lang === 'auto' ? 'auto' : lang;
   const targetCode = sourceCode === 'auto' ? 'auto' : sourceCode;
 
+  const t0Translit = Date.now();
+  console.log(`[sarvam] Transliterating (${lang} → roman): "${text.slice(0, 60)}"`);
   const response = await fetch(`${SARVAM_BASE_URL}/translate`, {
     method: 'POST',
     headers: {
@@ -502,6 +515,7 @@ export async function transliterateToRoman(
   }
 
   const data: SarvamTranslationResponse = await response.json();
+  console.log(`[sarvam] Transliteration done in ${Date.now() - t0Translit}ms`);
   return data.translated_text;
 }
 
