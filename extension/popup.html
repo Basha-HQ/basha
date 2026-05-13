@@ -56,57 +56,10 @@
     }
     .btn-ghost:hover { border-color: #334155; color: #cbd5e1; }
 
-    .btn-record {
-      background: linear-gradient(135deg, #7c3aed, #6366f1);
-      color: #fff;
-    }
-    .btn-record:hover { opacity: 0.9; }
-
-    /* ── Platform badge ───────────────────────────────────── */
-    .platform-badge {
-      display: inline-flex; align-items: center; gap: 5px;
-      background: rgba(34,197,94,0.08);
-      border: 1px solid rgba(34,197,94,0.3);
-      border-radius: 20px; padding: 3px 10px;
-      font-size: 11px; color: #4ade80; font-weight: 500;
-    }
-    .platform-dot {
-      width: 5px; height: 5px; background: #4ade80; border-radius: 50%;
-    }
-
     /* ── Idle (no meeting) ───────────────────────────────── */
     .idle-hint {
       font-size: 12px; color: #475569; line-height: 1.5; text-align: center;
     }
-
-    /* ── Recording ───────────────────────────────────────── */
-    .rec-row {
-      display: flex; align-items: center; gap: 10px;
-      background: #0f172a; border: 1px solid #1e293b;
-      border-radius: 10px; padding: 12px 14px;
-    }
-    .rec-dot {
-      width: 9px; height: 9px; background: #ef4444; border-radius: 50%;
-      flex-shrink: 0; animation: pulse 1.2s infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-    .rec-timer {
-      font-size: 20px; font-weight: 700;
-      font-variant-numeric: tabular-nums; line-height: 1;
-    }
-    .rec-label { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-    /* ── Processing ──────────────────────────────────────── */
-    .spin-wrap { text-align: center; padding: 4px 0; }
-    .spinner {
-      width: 28px; height: 28px;
-      border: 2.5px solid #1e293b; border-top-color: #7c3aed;
-      border-radius: 50%; animation: spin 0.85s linear infinite;
-      margin: 0 auto 10px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spin-title { font-weight: 600; font-size: 13px; }
-    .spin-sub { font-size: 11px; color: #475569; margin-top: 4px; }
 
     /* ── Done ────────────────────────────────────────────── */
     .done-check {
@@ -143,6 +96,7 @@
       width: 9px; height: 9px; background: #f59e0b; border-radius: 50%;
       flex-shrink: 0; animation: pulse 1.2s infinite;
     }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
     .bot-status-label { font-size: 13px; font-weight: 600; }
     .bot-status-url { font-size: 11px; color: #64748b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 210px; }
 
@@ -152,18 +106,6 @@
       border-radius: 8px; padding: 10px 12px;
       font-size: 12px; color: #fca5a5; line-height: 1.5;
     }
-
-    /* ── Language selector ───────────────────────────────── */
-    .lang-row {
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .lang-label { font-size: 11px; color: #64748b; }
-    .lang-select {
-      background: #111827; border: 1px solid #1e293b; color: #94a3b8;
-      border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer;
-      outline: none;
-    }
-    .lang-select:focus { border-color: #f59e0b; }
   </style>
 </head>
 <body>
@@ -209,53 +151,6 @@
 <div id="view-no-tab" class="view">
   <p class="idle-hint">Open a Google Meet, Zoom, Teams, or Webex meeting and click the Basha icon to record.</p>
   <button id="btn-open-meet" class="btn btn-ghost">Start a meeting</button>
-</div>
-
-<!-- ── VIEW: meeting detected, ready to record ──────────── -->
-<div id="view-ready" class="view">
-  <div>
-    <div class="platform-badge">
-      <div class="platform-dot"></div>
-      <span id="meeting-platform">Google Meet</span> detected
-    </div>
-  </div>
-  <p style="font-size:12px;color:#64748b;">Ready to record — click below to start.</p>
-  <div class="lang-row">
-    <span class="lang-label">Language</span>
-    <select id="lang-select" class="lang-select">
-      <option value="auto">Auto-detect</option>
-      <option value="hi-IN">Hindi</option>
-      <option value="ta-IN">Tamil</option>
-      <option value="te-IN">Telugu</option>
-      <option value="kn-IN">Kannada</option>
-      <option value="en-IN">English</option>
-    </select>
-  </div>
-  <button id="btn-start" class="btn btn-record">Start Recording</button>
-  <p style="font-size:10px;color:#475569;line-height:1.5;text-align:center;margin-top:-2px;">
-    Tip: use headphones for the cleanest recording — speakers + mic in the same room can degrade quality.
-  </p>
-</div>
-
-<!-- ── VIEW: recording active ───────────────────────────── -->
-<div id="view-recording" class="view">
-  <div class="rec-row">
-    <div class="rec-dot"></div>
-    <div>
-      <div class="rec-timer" id="rec-timer">0:00</div>
-      <div class="rec-label">Recording in progress</div>
-    </div>
-  </div>
-  <button id="btn-stop" class="btn btn-ghost">Stop &amp; Process</button>
-</div>
-
-<!-- ── VIEW: uploading / processing ─────────────────────── -->
-<div id="view-processing" class="view">
-  <div class="spin-wrap">
-    <div class="spinner"></div>
-    <div class="spin-title" id="proc-title">Uploading audio…</div>
-    <div class="spin-sub" id="proc-sub">This may take a moment</div>
-  </div>
 </div>
 
 <!-- ── VIEW: transcript ready ───────────────────────────── -->

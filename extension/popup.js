@@ -1,5 +1,6 @@
 /**
  * Basha Chrome Extension — Popup script (popup.js)
+ * Bot-only mode: no local recording.
  */
 
 const APP_ORIGINS = ['https://trybasha.in'];
@@ -11,16 +12,13 @@ const MEETING_PATTERNS = [
   { re: /webex\.com\/meet\/|\.webex\.com\/j\//, label: 'Webex' },
 ];
 
-// Supported meeting URL patterns for bot launching (broader than tab detection)
 const BOT_URL_RE =
   /meet\.google\.com\/|zoom\.us\/(j|wc)\/|app\.zoom\.us|teams\.(microsoft|live)\.com|webex\.com\/meet\/|\.webex\.com\/j\//;
 
-let timerInterval = null;
 let botPollInterval = null;
-let currentMeetingUrl = '';
 
 // ---------------------------------------------------------------------------
-// Utility
+// Utilities
 // ---------------------------------------------------------------------------
 
 function showView(id) {
@@ -34,22 +32,13 @@ function send(type, data = {}) {
   });
 }
 
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function startTimer(startedAt) {
-  if (timerInterval) clearInterval(timerInterval);
-  const el = document.getElementById('rec-timer');
-  timerInterval = setInterval(() => {
-    el.textContent = formatTime(Math.floor((Date.now() - startedAt) / 1000));
-  }, 1000);
-}
-
-function stopTimer() {
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+function truncateUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname + u.pathname.slice(0, 30) + (u.pathname.length > 30 ? '…' : '');
+  } catch {
+    return url.slice(0, 40);
+  }
 }
 
 function stopBotPoll() {
@@ -65,17 +54,8 @@ function isValidMeetingUrl(url) {
   return BOT_URL_RE.test(url);
 }
 
-function truncateUrl(url) {
-  try {
-    const u = new URL(url);
-    return u.hostname + u.pathname.slice(0, 30) + (u.pathname.length > 30 ? '…' : '');
-  } catch {
-    return url.slice(0, 40);
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Bot status label mapping
+// Bot status label
 // ---------------------------------------------------------------------------
 
 function botPhaseLabel(botPhase, meetingStatus) {
@@ -109,8 +89,7 @@ async function startBotPolling(meetingId, authToken, origin) {
       if (!res.ok) return;
       const data = await res.json();
 
-      const label = botPhaseLabel(data.botPhase, data.status);
-      document.getElementById('bot-status-label').textContent = label;
+      document.getElementById('bot-status-label').textContent = botPhaseLabel(data.botPhase, data.status);
 
       if (data.status === 'completed') {
         stopBotPoll();
@@ -130,27 +109,27 @@ async function startBotPolling(meetingId, authToken, origin) {
 }
 
 // ---------------------------------------------------------------------------
-// After "View Notes" or "New Recording" — reset to idle
+// Reset to idle
 // ---------------------------------------------------------------------------
 
 async function resetToIdleState() {
-  stopTimer();
   stopBotPoll();
-  await chrome.storage.session.remove(['status', 'meetingId', 'processingUrl', 'error', 'botMeetingId']);
+  await chrome.storage.session.remove(['botMeetingId', 'botMeetingUrl']);
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const matched = MEETING_PATTERNS.find(({ re }) => re.test(tab?.url || ''));
-  if (matched) {
-    currentMeetingUrl = tab.url;
-    document.getElementById('meeting-platform').textContent = matched.label;
-    showView('view-ready');
-  } else {
-    const { extensionToken } = await chrome.storage.local.get('extensionToken');
-    if (!extensionToken) {
-      showView('view-auth');
-    } else {
-      showView('view-bot-mode');
-    }
+  const tabUrl = tab?.url || '';
+  const matched = MEETING_PATTERNS.find(({ re }) => re.test(tabUrl));
+
+  const { extensionToken } = await chrome.storage.local.get('extensionToken');
+  if (!extensionToken) {
+    showView('view-auth');
+    return;
   }
+
+  if (matched) {
+    document.getElementById('bot-url-input').value = tabUrl;
+  }
+  showView('view-bot-mode');
 }
 
 // ---------------------------------------------------------------------------
@@ -158,68 +137,43 @@ async function resetToIdleState() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  const state = await send('GET_STATE');
-
-  if (state.isRecording && state.status === 'recording') {
-    showView('view-recording');
-    startTimer(state.startedAt);
-    return;
-  }
-  if (state.status === 'uploading') {
-    document.getElementById('proc-title').textContent = 'Uploading audio…';
-    document.getElementById('proc-sub').textContent = 'Please keep this window open';
-    showView('view-processing');
-    return;
-  }
-  if (state.status === 'processing') {
-    document.getElementById('proc-title').textContent = 'Transcribing your meeting';
-    document.getElementById('proc-sub').textContent = 'Sarvam AI is processing the audio…';
-    showView('view-processing');
-    return;
-  }
-  if (state.status === 'completed') {
-    const origin = await getOrigin();
-    if (state.processingUrl) {
-      document.getElementById('btn-view-notes').href = `${origin}${state.processingUrl}`;
-    }
-    showView('view-done');
-    return;
-  }
-  if (state.status === 'failed') {
-    document.getElementById('error-msg').textContent = state.error || 'Something went wrong.';
-    showView('view-failed');
-    return;
-  }
-
-  // Check auth token
   const { extensionToken } = await chrome.storage.local.get('extensionToken');
+  const origin = await getOrigin();
+
   if (!extensionToken) {
-    const origin = await getOrigin();
     document.getElementById('btn-open-app').href = `${origin}/settings`;
     showView('view-auth');
     return;
   }
 
-  const origin = await getOrigin();
   document.getElementById('btn-bot-mode-app').href = `${origin}/dashboard`;
 
-  // If there's an in-flight bot session, restore it
-  const { botMeetingId } = await chrome.storage.session.get('botMeetingId');
+  // Restore an in-flight bot session
+  const { botMeetingId, botMeetingUrl } = await chrome.storage.session.get([
+    'botMeetingId',
+    'botMeetingUrl',
+  ]);
   if (botMeetingId) {
-    const urlStore = await chrome.storage.session.get('botMeetingUrl');
-    document.getElementById('bot-status-url').textContent = urlStore.botMeetingUrl
-      ? truncateUrl(urlStore.botMeetingUrl)
+    document.getElementById('bot-status-url').textContent = botMeetingUrl
+      ? truncateUrl(botMeetingUrl)
       : '';
     showView('view-bot-active');
     await startBotPolling(botMeetingId, extensionToken, origin);
     return;
   }
 
+  // If the current tab is a meeting page, pre-fill the URL input
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabUrl = tab?.url || '';
+  if (isValidMeetingUrl(tabUrl)) {
+    document.getElementById('bot-url-input').value = tabUrl;
+  }
+
   showView('view-bot-mode');
 }
 
 // ---------------------------------------------------------------------------
-// Launch Bot button
+// Launch bot button
 // ---------------------------------------------------------------------------
 
 document.getElementById('btn-launch-bot').addEventListener('click', async () => {
@@ -282,59 +236,8 @@ document.getElementById('btn-launch-bot').addEventListener('click', async () => 
   }
 });
 
-// Clear error on input change
 document.getElementById('bot-url-input').addEventListener('input', () => {
   document.getElementById('url-error').style.display = 'none';
-});
-
-// ---------------------------------------------------------------------------
-// Start recording (extension tab-capture — legacy flow)
-// ---------------------------------------------------------------------------
-
-document.getElementById('btn-start').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  try {
-    const micStatus = await navigator.permissions.query({ name: 'microphone' });
-    if (micStatus.state !== 'granted') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('mic-permission.html') });
-      return;
-    }
-  } catch { /* proceed anyway */ }
-
-  const selectedLang = document.getElementById('lang-select').value;
-  chrome.storage.local.set({ lastSourceLanguage: selectedLang });
-
-  document.getElementById('proc-title').textContent = 'Starting recording…';
-  document.getElementById('proc-sub').textContent = 'Connecting to meeting audio';
-  showView('view-processing');
-
-  const result = await send('START_RECORDING', {
-    tabId: tab.id,
-    sourceLanguage: selectedLang,
-    meetingUrl: currentMeetingUrl,
-  });
-
-  if (result.error) {
-    document.getElementById('error-msg').textContent = result.error;
-    showView('view-failed');
-    return;
-  }
-
-  showView('view-recording');
-  startTimer(Date.now());
-});
-
-// ---------------------------------------------------------------------------
-// Stop recording
-// ---------------------------------------------------------------------------
-
-document.getElementById('btn-stop').addEventListener('click', async () => {
-  stopTimer();
-  document.getElementById('proc-title').textContent = 'Uploading audio…';
-  document.getElementById('proc-sub').textContent = 'Please keep this window open';
-  showView('view-processing');
-  await send('STOP_RECORDING');
 });
 
 // ---------------------------------------------------------------------------
@@ -356,45 +259,15 @@ document.getElementById('btn-view-notes').addEventListener('click', () => {
   setTimeout(() => resetToIdleState(), 100);
 });
 
-document.getElementById('btn-new-recording').addEventListener('click', () => {
-  resetToIdleState();
-});
-
-document.getElementById('btn-retry').addEventListener('click', () => {
-  resetToIdleState();
-});
+document.getElementById('btn-new-recording').addEventListener('click', resetToIdleState);
+document.getElementById('btn-retry').addEventListener('click', resetToIdleState);
 
 // ---------------------------------------------------------------------------
-// Listen for state updates from background
+// State updates from background
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onMessage.addListener(async (message) => {
-  if (message.type !== 'STATE_UPDATE') return;
-
-  if (message.isRecording && message.status === 'recording') {
-    showView('view-recording');
-    startTimer(message.startedAt);
-  } else if (message.status === 'uploading') {
-    stopTimer();
-    document.getElementById('proc-title').textContent = 'Uploading audio…';
-    document.getElementById('proc-sub').textContent = 'Please keep this window open';
-    showView('view-processing');
-  } else if (message.status === 'processing') {
-    document.getElementById('proc-title').textContent = 'Transcribing your meeting';
-    document.getElementById('proc-sub').textContent = 'Sarvam AI is processing the audio…';
-    showView('view-processing');
-  } else if (message.status === 'completed') {
-    stopTimer();
-    if (message.processingUrl) {
-      const origin = await getOrigin();
-      document.getElementById('btn-view-notes').href = `${origin}${message.processingUrl}`;
-    }
-    showView('view-done');
-  } else if (message.status === 'failed') {
-    stopTimer();
-    document.getElementById('error-msg').textContent = message.error || 'Something went wrong.';
-    showView('view-failed');
-  } else if (message.authed) {
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'STATE_UPDATE' && message.authed) {
     init();
   }
 });

@@ -93,7 +93,8 @@ export async function GET(req: NextRequest) {
        AND u.auto_join_mode != 'off'
        AND i.scheduled_start IS NOT NULL
        AND i.scheduled_start <= NOW() + INTERVAL '6 minutes'
-       AND i.scheduled_start >  NOW() - INTERVAL '5 minutes'
+       AND i.scheduled_start >  NOW() - INTERVAL '30 minutes'
+       AND i.scheduled_start + INTERVAL '2 hours' > NOW()
      ORDER BY i.scheduled_start ASC
      LIMIT 20`
   );

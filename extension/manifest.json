@@ -2,12 +2,10 @@
   "manifest_version": 3,
   "name": "Basha",
   "short_name": "Basha",
-  "description": "Record your Google Meet, Zoom, or Teams meeting with your consent. No bots. No invites. Transcribed in Hinglish, Tanglish & more.",
-  "version": "1.0.0",
+  "description": "Send a Basha notetaker bot into your Google Meet, Zoom, or Teams meeting — no local recording, no audio capture.",
+  "version": "1.1.0",
 
   "permissions": [
-    "tabCapture",
-    "offscreen",
     "storage",
     "tabs",
     "alarms"
@@ -24,7 +22,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Basha — Record meeting",
+    "default_title": "Basha — Launch notetaker bot",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -39,16 +37,6 @@
   },
 
   "content_scripts": [
-    {
-      "matches": [
-        "https://meet.google.com/*",
-        "https://teams.microsoft.com/*",
-        "https://teams.live.com/*"
-      ],
-      "js": ["injected-rtc.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
     {
       "matches": [
         "https://meet.google.com/*",
@@ -67,17 +55,6 @@
       ],
       "js": ["content-script-app.js"],
       "run_at": "document_idle"
-    }
-  ],
-
-  "web_accessible_resources": [
-    {
-      "resources": ["injected-rtc.js"],
-      "matches": [
-        "https://meet.google.com/*",
-        "https://teams.microsoft.com/*",
-        "https://teams.live.com/*"
-      ]
     }
   ]
 }
