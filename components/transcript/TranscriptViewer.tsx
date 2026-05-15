@@ -54,6 +54,38 @@ const LANG_NAMES: Record<string, string> = {
   'en-IN': 'English', auto: 'Auto', unknown: 'Auto',
 };
 
+/** Detect Indian script language from text — client-side Unicode range check, no API. */
+function detectScriptLang(text: string): string | null {
+  if (!text) return null;
+  const ranges: Array<[number, number, string]> = [
+    [0x0B80, 0x0BFF, 'ta-IN'], [0x0900, 0x097F, 'hi-IN'],
+    [0x0C00, 0x0C7F, 'te-IN'], [0x0C80, 0x0CFF, 'kn-IN'],
+    [0x0D00, 0x0D7F, 'ml-IN'], [0x0980, 0x09FF, 'bn-IN'],
+    [0x0A80, 0x0AFF, 'gu-IN'], [0x0A00, 0x0A7F, 'pa-IN'],
+    [0x0B00, 0x0B7F, 'or-IN'],
+  ];
+  const counts: Record<string, number> = {};
+  let total = 0;
+  for (const char of text) {
+    if (/\s/.test(char)) continue;
+    total++;
+    const cp = char.codePointAt(0)!;
+    for (const [lo, hi, lang] of ranges) {
+      if (cp >= lo && cp <= hi) { counts[lang] = (counts[lang] ?? 0) + 1; break; }
+    }
+  }
+  if (total === 0) return null;
+  let best: string | null = null, bestCount = 0;
+  for (const [lang, count] of Object.entries(counts)) {
+    if (count > bestCount) { best = lang; bestCount = count; }
+  }
+  return best && bestCount / total >= 0.10 ? best : null;
+}
+
+/** Strip trailing punctuation + collapse whitespace before English-equivalence check. */
+const normForCompare = (s: string) =>
+  s.toLowerCase().replace(/[.!?,;:…]+$/, '').replace(/\s+/g, ' ').trim();
+
 function getSpeakerColor(speaker: string, speakerMap: Map<string, number>) {
   if (!speakerMap.has(speaker)) {
     speakerMap.set(speaker, speakerMap.size);
@@ -344,24 +376,31 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
 
         {/* Language header — shown above segments when non-English content is present */}
         {(() => {
+          const nonEnglishLangs = new Set<string>();
           const hasNonEnglish = transcripts.some((t) => {
             const en = t.english_text?.trim() ?? '';
             const og = t.original_text?.trim() ?? '';
-            return en && en.toLowerCase() !== og.toLowerCase();
+            if (!en || normForCompare(en) === normForCompare(og)) return false;
+            const scriptLang = detectScriptLang(og);
+            if (scriptLang) nonEnglishLangs.add(scriptLang);
+            return true;
           });
           if (!hasNonEnglish) return null;
 
-          const langName = sourceLanguage && LANG_NAMES[sourceLanguage]
-            ? LANG_NAMES[sourceLanguage].toLowerCase()
-            : null;
-          const label = langName && langName !== 'english' && langName !== 'auto'
-            ? `(${langName}+english)`
+          // Fall back to sourceLanguage if script detection found no Indian script
+          // (e.g. Tanglish — Tamil spoken but transcribed in Latin characters)
+          if (nonEnglishLangs.size === 0 && sourceLanguage
+            && sourceLanguage !== 'en-IN' && sourceLanguage !== 'en'
+            && sourceLanguage !== 'auto' && sourceLanguage !== 'unknown') {
+            nonEnglishLangs.add(sourceLanguage);
+          }
+
+          const label = nonEnglishLangs.size === 1
+            ? `(${LANG_NAMES[Array.from(nonEnglishLangs)[0]]?.toLowerCase() ?? Array.from(nonEnglishLangs)[0]}+english)`
             : '(multiple languages)';
 
           return (
-            <div
-              className="flex justify-end px-5 pt-3"
-            >
+            <div className="flex justify-end px-5 pt-3">
               <span
                 style={{
                   fontSize: 10.5, fontWeight: 600,
@@ -412,6 +451,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
                   isActive={seg.id === activeSegmentId}
                   isFlagged={flaggedSegmentIds?.includes(seg.id) ?? false}
                   onSeek={audioPath ? () => { seekAudioRef.current?.(displayTs); } : undefined}
+                  sourceLanguage={sourceLanguage}
                   domRef={(el) => {
                     if (fullIdx >= 0) segmentRefs.current[fullIdx] = el;
                   }}
@@ -458,6 +498,7 @@ function TranscriptRow({
   isFlagged,
   onSeek,
   domRef,
+  sourceLanguage,
 }: {
   segment: TranscriptRow;
   displayTimestamp: number;
@@ -471,6 +512,7 @@ function TranscriptRow({
   isFlagged?: boolean;
   onSeek?: () => void;
   domRef?: (el: HTMLDivElement | null) => void;
+  sourceLanguage?: string;
 }) {
   const sc = segment.speaker ? getSpeakerColor(segment.speaker, speakerMap) : null;
   const [editing, setEditing] = useState(false);
@@ -492,10 +534,10 @@ function TranscriptRow({
   const label = segment.speaker ? speakerLabel(segment.speaker, speakerLabels) : null;
   const initial = segment.speaker ? speakerInitial(segment.speaker, speakerLabels) : null;
 
-  // Pure-English: original and english match (case-insensitive trim) → no whisper
+  // Pure-English: original and english match after normalising trailing punctuation → no whisper
   const enText = segment.english_text?.trim() ?? '';
   const ogText = segment.original_text?.trim() ?? '';
-  const isPureEnglish = !enText || enText.toLowerCase() === ogText.toLowerCase();
+  const isPureEnglish = !enText || normForCompare(enText) === normForCompare(ogText);
 
   // Card background: slate wash for English, fixed warm-amber gradient for non-English
   const cardBackground = isPureEnglish
@@ -591,7 +633,7 @@ function TranscriptRow({
           </span>
         )}
 
-        {/* Language dot — "mixed" for non-English segments, pushed to the right */}
+        {/* Language dot — specific language name or "mixed" for non-English segments */}
         {!isPureEnglish && (
           <span className="flex items-center" style={{ gap: 5, marginLeft: 'auto' }}>
             <span
@@ -606,7 +648,14 @@ function TranscriptRow({
                 color: 'rgba(245,158,11,0.7)',
               }}
             >
-              mixed
+              {(() => {
+                const scriptLang = detectScriptLang(ogText);
+                const lang = scriptLang
+                  ?? (sourceLanguage && sourceLanguage !== 'en-IN' && sourceLanguage !== 'en'
+                    && sourceLanguage !== 'auto' && sourceLanguage !== 'unknown'
+                    ? sourceLanguage : null);
+                return lang ? (LANG_NAMES[lang]?.toLowerCase() ?? 'mixed') : 'mixed';
+              })()}
             </span>
           </span>
         )}
