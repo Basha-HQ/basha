@@ -109,6 +109,10 @@ export async function createBot(
       },
       participant_events: {},
     },
+    // Leave automatically 5 seconds after all human participants have gone
+    automatic_leave: {
+      everyone_left_timeout: 5,
+    },
   };
   if (webhookUrl) {
     body.webhook_url = webhookUrl;

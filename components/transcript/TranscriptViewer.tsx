@@ -377,27 +377,41 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
         {/* Language header — shown above segments when non-English content is present */}
         {(() => {
           const nonEnglishLangs = new Set<string>();
-          const hasNonEnglish = transcripts.some((t) => {
+          let hasNonEnglish = false;
+
+          // Iterate ALL segments so every detected script contributes (not just the first)
+          for (const t of transcripts) {
             const en = t.english_text?.trim() ?? '';
             const og = t.original_text?.trim() ?? '';
-            if (!en || normForCompare(en) === normForCompare(og)) return false;
+            if (!en || normForCompare(en) === normForCompare(og)) continue;
+            hasNonEnglish = true;
             const scriptLang = detectScriptLang(og);
             if (scriptLang) nonEnglishLangs.add(scriptLang);
-            return true;
-          });
+          }
           if (!hasNonEnglish) return null;
 
-          // Fall back to sourceLanguage if script detection found no Indian script
-          // (e.g. Tanglish — Tamil spoken but transcribed in Latin characters)
+          // Tanglish fallback: Sarvam often labels code-mixed audio as 'en-IN'.
+          // When all segments are Latin-script (detectScriptLang = null) but
+          // translations differ, use sourceLanguage — excluding en-IN/en which
+          // are likely Sarvam misclassifications of Tanglish/Hinglish.
           if (nonEnglishLangs.size === 0 && sourceLanguage
             && sourceLanguage !== 'en-IN' && sourceLanguage !== 'en'
             && sourceLanguage !== 'auto' && sourceLanguage !== 'unknown') {
             nonEnglishLangs.add(sourceLanguage);
           }
 
-          const label = nonEnglishLangs.size === 1
-            ? `(${LANG_NAMES[Array.from(nonEnglishLangs)[0]]?.toLowerCase() ?? Array.from(nonEnglishLangs)[0]}+english)`
-            : '(multiple languages)';
+          let label: string;
+          if (nonEnglishLangs.size === 1) {
+            const langKey = Array.from(nonEnglishLangs)[0];
+            const langName = LANG_NAMES[langKey] ?? langKey.split('-')[0];
+            label = `English + ${langName}`;
+          } else if (nonEnglishLangs.size > 1) {
+            label = 'Mixed Languages';
+          } else {
+            // Tanglish with sourceLanguage='en-IN' misclassification — can't
+            // determine the language; hide the header rather than show a wrong label.
+            return null;
+          }
 
           return (
             <div className="flex justify-end px-5 pt-3">
@@ -633,32 +647,34 @@ function TranscriptRow({
           </span>
         )}
 
-        {/* Language dot — specific language name or "mixed" for non-English segments */}
-        {!isPureEnglish && (
-          <span className="flex items-center" style={{ gap: 5, marginLeft: 'auto' }}>
-            <span
-              style={{
-                width: 5, height: 5, borderRadius: 99,
-                background: '#f59e0b', opacity: 0.7,
-              }}
-            />
-            <span
-              style={{
-                fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
-                color: 'rgba(245,158,11,0.7)',
-              }}
-            >
-              {(() => {
-                const scriptLang = detectScriptLang(ogText);
-                const lang = scriptLang
-                  ?? (sourceLanguage && sourceLanguage !== 'en-IN' && sourceLanguage !== 'en'
-                    && sourceLanguage !== 'auto' && sourceLanguage !== 'unknown'
-                    ? sourceLanguage : null);
-                return lang ? (LANG_NAMES[lang]?.toLowerCase() ?? 'mixed') : 'mixed';
-              })()}
+        {/* Language dot — specific language name for non-English segments */}
+        {!isPureEnglish && (() => {
+          const scriptLang = detectScriptLang(ogText);
+          const lang = scriptLang
+            ?? (sourceLanguage && sourceLanguage !== 'en-IN' && sourceLanguage !== 'en'
+              && sourceLanguage !== 'auto' && sourceLanguage !== 'unknown'
+              ? sourceLanguage : null);
+          if (!lang) return null; // Tanglish / indeterminate — hide rather than show "mixed"
+          const langLabel = LANG_NAMES[lang]?.toLowerCase() ?? lang.split('-')[0].toLowerCase();
+          return (
+            <span className="flex items-center" style={{ gap: 5, marginLeft: 'auto' }}>
+              <span
+                style={{
+                  width: 5, height: 5, borderRadius: 99,
+                  background: '#f59e0b', opacity: 0.7,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
+                  color: 'rgba(245,158,11,0.7)',
+                }}
+              >
+                {langLabel}
+              </span>
             </span>
-          </span>
-        )}
+          );
+        })()}
 
         {/* Flag button — pushed to right when no language tag, after when there is one */}
         {onFlag && (
@@ -669,7 +685,7 @@ function TranscriptRow({
             }`}
             style={{
               color: isFlagged ? '#fb7185' : 'rgba(255,255,255,0.2)',
-              marginLeft: !isPureEnglish ? 4 : 'auto',
+              marginLeft: 'auto',
             }}
             title={isFlagged ? 'Already flagged — click to update' : 'Flag incorrect transcript'}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#fb7185')}
