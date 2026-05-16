@@ -18,6 +18,7 @@ import {
   splitIntoSegments,
   transliterateToRoman,
   detectLanguageFromScript,
+  type SarvamSTTResponse,
 } from '@/lib/ai/sarvam';
 import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
@@ -27,6 +28,24 @@ import {
   windowsFromDiarized,
   resolveAndPersistSpeakerLabels,
 } from '@/lib/recording/speakerLabels';
+
+/**
+ * Retry a Sarvam STT call once if it times out (transient queue congestion).
+ * Any other error is re-thrown immediately.
+ */
+async function withSarvamRetry(fn: () => Promise<SarvamSTTResponse>): Promise<SarvamSTTResponse> {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('timeout')) {
+      console.warn('[pipeline] Sarvam timed out — retrying once in 5s…');
+      await new Promise((r) => setTimeout(r, 5000));
+      return fn();
+    }
+    throw err;
+  }
+}
 
 /**
  * Roman invariant: original_text must contain only Latin/ASCII characters
@@ -134,7 +153,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // the audio and returns an English translation. The detected `language_code`
     // becomes the canonical hint for Pipeline B. No browser locale, no sticky
     // preference — each meeting is detected fresh from the audio.
-    const pipelineA = await transcribeAndTranslateAudio(audioBuffer, fileName);
+    const pipelineA = await withSarvamRetry(() => transcribeAndTranslateAudio(audioBuffer, fileName));
     const detectedLang =
       pipelineA.language_code && pipelineA.language_code !== 'unknown'
         ? pipelineA.language_code
@@ -150,8 +169,8 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // misclassifies code-mixed Tanglish/Hinglish as pure English. Per-segment
     // detectLanguageFromScript below handles truly pure-English segments cheaply.
     const pipelineB = (detectedLang === 'en-IN' || !detectedLang)
-      ? await transcribeAudio(audioBuffer, fileName, 'transcribe')
-      : await transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang);
+      ? await withSarvamRetry(() => transcribeAudio(audioBuffer, fileName, 'transcribe'))
+      : await withSarvamRetry(() => transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang!));
     console.log('[pipeline] Pipeline B — native transcript length:', pipelineB.transcript?.length,
       '| diarized:', pipelineB.diarized_entries?.length ?? 0);
 

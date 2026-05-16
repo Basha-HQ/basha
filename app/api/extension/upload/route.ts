@@ -13,6 +13,8 @@ import { getExtensionUser } from '@/lib/extension/auth';
 import { queryOne, query } from '@/lib/db';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
 
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getExtensionUser(req.headers.get('authorization'));

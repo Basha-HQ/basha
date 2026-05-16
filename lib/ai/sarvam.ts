@@ -149,7 +149,7 @@ async function transcribeAudioBatch(
     throw new Error(`Sarvam batch start failed: ${startRes.status} ${e}`);
   }
 
-  // Step 5: Poll until Completed (max 10 min)
+  // Step 5: Poll until Completed (max 4 min — must fit within Vercel's 300s maxDuration)
   // Status response includes task-level details with output file names
   type JobDetail = {
     inputs: Array<{ file_name: string; file_id: string }>;
@@ -164,7 +164,7 @@ async function transcribeAudioBatch(
     total_files?: number;
   };
   let completedStatus: StatusResponse | null = null;
-  const pollDeadline = Date.now() + 10 * 60 * 1000;
+  const pollDeadline = Date.now() + 4 * 60 * 1000;
   const pollStart = Date.now();
   let pollCount = 0;
   while (Date.now() < pollDeadline) {

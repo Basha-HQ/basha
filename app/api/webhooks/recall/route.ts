@@ -23,6 +23,8 @@ import { queryOne, query } from '@/lib/db';
 import { getBot as getRecallBot } from '@/lib/recall/client';
 import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
 
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   // Webhook secret verification — required in production
   const secret = process.env.RECALL_WEBHOOK_SECRET;

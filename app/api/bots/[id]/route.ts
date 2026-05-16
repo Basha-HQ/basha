@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { queryOne, query } from '@/lib/db';
+
+export const maxDuration = 300;
 import {
   getBot as getRecallBot,
   deleteBot as deleteRecallBot,

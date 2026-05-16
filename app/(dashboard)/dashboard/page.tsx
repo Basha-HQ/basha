@@ -3,6 +3,7 @@ import { query, queryOne } from '@/lib/db';
 import Link from 'next/link';
 import { MeetingCard } from '@/components/meetings/MeetingCard';
 import { UpcomingMeetings } from '@/components/dashboard/UpcomingMeetings';
+import { DashboardPoller } from '@/components/meetings/DashboardPoller';
 
 interface Meeting {
   id: string;
@@ -348,6 +349,9 @@ export default async function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Live status polling — shows toast when a processing meeting completes */}
+      <DashboardPoller recentMeetings={recentMeetings.map((m) => ({ id: m.id, title: m.title, status: m.status }))} />
     </div>
   );
 }
