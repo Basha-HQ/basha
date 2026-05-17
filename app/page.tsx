@@ -714,6 +714,8 @@ export default function LandingPage() {
             <a href="#" className="hover:text-white transition-colors">Blog</a>
             <Link href="/login" className="hover:text-white transition-colors">Sign in</Link>
             <Link href="/signup" className="hover:text-white transition-colors">Get started</Link>
+            <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
           </div>
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>
             © {new Date().getFullYear()} Basha. All rights reserved.
