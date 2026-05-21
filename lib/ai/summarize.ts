@@ -24,6 +24,13 @@ export async function generateSummary(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set');
 
+  // Truncate very long transcripts so the free model isn't overwhelmed and
+  // doesn't produce truncated (unparseable) JSON responses.
+  const MAX_TRANSCRIPT_CHARS = 7000;
+  const transcript = englishTranscript.length > MAX_TRANSCRIPT_CHARS
+    ? englishTranscript.slice(0, 5000) + '\n\n[...middle of meeting truncated for summary...]\n\n' + englishTranscript.slice(-2000)
+    : englishTranscript;
+
   const prompt = `You are a meeting notes assistant. Analyze the following meeting transcript and extract:
 
 1. A brief overview (1-2 sentences describing the main purpose and outcome)
@@ -45,13 +52,6 @@ Respond in this exact JSON format:
 }
 
 Be concise. The overview must be 1–2 sentences. If a section has no content, use an empty array.`;
-
-  // Truncate very long transcripts so the free model isn't overwhelmed and
-  // doesn't produce truncated (unparseable) JSON responses.
-  const MAX_TRANSCRIPT_CHARS = 7000;
-  const transcript = englishTranscript.length > MAX_TRANSCRIPT_CHARS
-    ? englishTranscript.slice(0, 5000) + '\n\n[...middle of meeting truncated for summary...]\n\n' + englishTranscript.slice(-2000)
-    : englishTranscript;
 
   console.log(`[summarize] Generating summary — transcript length: ${englishTranscript.length}${englishTranscript.length > MAX_TRANSCRIPT_CHARS ? ' (truncated to ' + MAX_TRANSCRIPT_CHARS + ')' : ''}`);
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
