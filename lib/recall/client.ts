@@ -114,6 +114,21 @@ export async function createBot(
       everyone_left_timeout: 5,
     },
   };
+  // Stream a branded overlay as the bot's camera feed.
+  // Recall.ai renders the URL in headless Chromium — only works when publicly reachable.
+  const appUrl = process.env.NEXTAUTH_URL ?? '';
+  if (appUrl.startsWith('https://')) {
+    body.output_media = {
+      camera: {
+        kind: 'webpage',
+        config: {
+          url: `${appUrl}/bot-overlay`,
+          width: 1280,
+          height: 720,
+        },
+      },
+    };
+  }
   if (webhookUrl) {
     body.webhook_url = webhookUrl;
   }
