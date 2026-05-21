@@ -267,7 +267,9 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
             const ogText = seg.text.trim();
             const differs = aText.length > 0
               && aText.toLowerCase() !== ogText.toLowerCase()
-              && Math.abs(aText.length - ogText.length) > 3;
+              && Math.abs(aText.length - ogText.length) > 3
+              && ogText.split(/\s+/).filter(Boolean).length >= 3
+              && aText.length <= ogText.length * 4;
             original = seg.text;
             english = differs ? aMatch.english : seg.text;
           } else if (outputScript === 'roman') {

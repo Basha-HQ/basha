@@ -135,10 +135,13 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
   const speakerMap = useMemo(() => {
     const map = new Map<string, number>();
     transcripts.forEach((t) => {
-      if (t.speaker && !map.has(t.speaker)) map.set(t.speaker, map.size);
+      if (t.speaker) {
+        const resolved = speakerLabel(t.speaker, speakerLabels);
+        if (!map.has(resolved)) map.set(resolved, map.size);
+      }
     });
     return map;
-  }, [transcripts]);
+  }, [transcripts, speakerLabels]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -528,7 +531,8 @@ function TranscriptRow({
   domRef?: (el: HTMLDivElement | null) => void;
   sourceLanguage?: string;
 }) {
-  const sc = segment.speaker ? getSpeakerColor(segment.speaker, speakerMap) : null;
+  const resolvedLabel = segment.speaker ? speakerLabel(segment.speaker, speakerLabels) : null;
+  const sc = resolvedLabel ? getSpeakerColor(resolvedLabel, speakerMap) : null;
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
 
@@ -548,10 +552,13 @@ function TranscriptRow({
   const label = segment.speaker ? speakerLabel(segment.speaker, speakerLabels) : null;
   const initial = segment.speaker ? speakerInitial(segment.speaker, speakerLabels) : null;
 
-  // Pure-English: original and english match after normalising trailing punctuation → no whisper
+  // Pure-English: no non-Latin script detected, and translation matches (or is absent)
   const enText = segment.english_text?.trim() ?? '';
   const ogText = segment.original_text?.trim() ?? '';
-  const isPureEnglish = !enText || normForCompare(enText) === normForCompare(ogText);
+  const hasNonLatinScript = detectScriptLang(ogText) !== null;
+  const isPureEnglish = hasNonLatinScript
+    ? false
+    : (!enText || normForCompare(enText) === normForCompare(ogText));
 
   // Card background: slate wash for English, fixed warm-amber gradient for non-English
   const cardBackground = isPureEnglish
