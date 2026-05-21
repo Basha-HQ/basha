@@ -86,7 +86,7 @@ Be concise. The overview must be 1–2 sentences. If a section has no content, u
     throw new Error('Could not parse summary JSON from model response');
   }
 
-  let parsed: Record<string, unknown>;
+  let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch {

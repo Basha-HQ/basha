@@ -319,7 +319,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 
     // 5. Generate summary + AI title — non-fatal: transcript is already saved
     const fullEnglish = englishSegments.join(' ');
-    let summary: MeetingSummary;
+    let summary: MeetingSummary = { topics: [], decisions: [], notes: [], rawSummary: '' };
     let aiTitle = '';
     try {
       summary = await generateSummary(fullEnglish, meeting?.title);
