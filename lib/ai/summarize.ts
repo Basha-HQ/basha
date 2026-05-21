@@ -34,7 +34,7 @@ export async function generateSummary(
 Meeting: ${meetingTitle ?? 'Team Meeting'}
 
 Transcript:
-${englishTranscript}
+${transcript}
 
 Respond in this exact JSON format:
 {
@@ -46,7 +46,14 @@ Respond in this exact JSON format:
 
 Be concise. The overview must be 1–2 sentences. If a section has no content, use an empty array.`;
 
-  console.log(`[summarize] Generating summary — transcript length: ${englishTranscript.length}`);
+  // Truncate very long transcripts so the free model isn't overwhelmed and
+  // doesn't produce truncated (unparseable) JSON responses.
+  const MAX_TRANSCRIPT_CHARS = 7000;
+  const transcript = englishTranscript.length > MAX_TRANSCRIPT_CHARS
+    ? englishTranscript.slice(0, 5000) + '\n\n[...middle of meeting truncated for summary...]\n\n' + englishTranscript.slice(-2000)
+    : englishTranscript;
+
+  console.log(`[summarize] Generating summary — transcript length: ${englishTranscript.length}${englishTranscript.length > MAX_TRANSCRIPT_CHARS ? ' (truncated to ' + MAX_TRANSCRIPT_CHARS + ')' : ''}`);
   const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -57,7 +64,7 @@ Be concise. The overview must be 1–2 sentences. If a section has no content, u
     },
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -79,7 +86,20 @@ Be concise. The overview must be 1–2 sentences. If a section has no content, u
     throw new Error('Could not parse summary JSON from model response');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    // Model may have truncated mid-JSON — try to close open arrays/objects and re-parse
+    try {
+      const repaired = jsonMatch[0].trimEnd().replace(/,\s*$/, '') + ']}';
+      parsed = JSON.parse(repaired);
+      console.warn('[summarize] Used partial-JSON repair to recover truncated response');
+    } catch {
+      console.error(`[summarize] JSON repair failed — raw response: "${text.slice(0, 300)}"`);
+      throw new Error('Could not parse summary JSON from model response');
+    }
+  }
   console.log(`[summarize] Summary parsed — topics: ${parsed.topics?.length ?? 0}, decisions: ${parsed.decisions?.length ?? 0}`);
 
   return {

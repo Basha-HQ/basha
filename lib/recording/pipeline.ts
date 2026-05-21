@@ -20,7 +20,7 @@ import {
   detectLanguageFromScript,
   type SarvamSTTResponse,
 } from '@/lib/ai/sarvam';
-import { generateSummary, generateMeetingTitle } from '@/lib/ai/summarize';
+import { generateSummary, generateMeetingTitle, type MeetingSummary } from '@/lib/ai/summarize';
 import { sendTranscriptReadyEmail } from '@/lib/email';
 import {
   normalizeSpeaker,
@@ -317,10 +317,18 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
       [meetingId]
     );
 
-    // 5. Generate summary + AI title
+    // 5. Generate summary + AI title — non-fatal: transcript is already saved
     const fullEnglish = englishSegments.join(' ');
-    const summary = await generateSummary(fullEnglish, meeting?.title);
-    const aiTitle = await generateMeetingTitle(summary);
+    let summary: MeetingSummary;
+    let aiTitle = '';
+    try {
+      summary = await generateSummary(fullEnglish, meeting?.title);
+      aiTitle = await generateMeetingTitle(summary);
+    } catch (summaryErr) {
+      const summaryMsg = summaryErr instanceof Error ? summaryErr.message : String(summaryErr);
+      console.error(`[pipeline] Summary generation failed (non-fatal) — meeting will still complete: ${summaryMsg}`);
+      summary = { topics: [], decisions: [], notes: [], rawSummary: '' };
+    }
     // Fallback: extract first 7 words of overview when AI title generation fails
     const effectiveTitle = aiTitle ||
       (summary.overview
