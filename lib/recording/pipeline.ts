@@ -230,81 +230,84 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     }
 
     // ── Per-segment processing ───────────────────────────────────────────────
-    // Per-segment script detection handles mid-meeting language switching:
-    // each segment is checked independently so Tamil segments in an otherwise
-    // English meeting get transliterated while English segments stay as-is.
-    const englishSegments: string[] = [];
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      let original: string;
-      let english: string;
+    // Batched parallel processing (10 at a time) — each segment's translate +
+    // transliterate calls are independent so we run them concurrently. English-only
+    // segments skip all API calls so the concurrency only fires where it matters.
+    const SEGMENT_BATCH = 10;
+    const englishSegments: string[] = new Array(segments.length).fill('');
+    for (let batchStart = 0; batchStart < segments.length; batchStart += SEGMENT_BATCH) {
+      const batchEnd = Math.min(batchStart + SEGMENT_BATCH, segments.length);
+      console.log(`[pipeline] Segments ${batchStart + 1}–${batchEnd}/${segments.length}`);
+      await Promise.all(
+        segments.slice(batchStart, batchEnd).map(async (seg, batchIdx) => {
+          const i = batchStart + batchIdx;
+          let original: string;
+          let english: string;
 
-      const segScriptLang = detectLanguageFromScript(seg.text);
-      // If the user's profile speaking_language is non-English, treat Latin-script
-      // segments as potentially Romanized native text (Tanglish/Hinglish) — Sarvam
-      // often misclassifies these as pure English at the audio level.
-      const userPrefsNonEnglish = !!speakingLanguage && speakingLanguage !== 'en' && speakingLanguage !== 'en-IN';
-      const segIsEnglish = !segScriptLang
-        && (detectedLang === 'en-IN' || !detectedLang)
-        && !userPrefsNonEnglish;
-      // When Sarvam detected a non-English language for the whole audio, Latin-script
-      // segments (Tanglish/Hinglish code-mixing) inherit that language so they get
-      // translated rather than silently skipped.
-      const isKnownNonEnglish = !!detectedLang && detectedLang !== 'unknown' && detectedLang !== 'en-IN' && detectedLang !== 'en';
-      const segLang = segScriptLang ?? (isKnownNonEnglish ? detectedLang : (userPrefsNonEnglish ? speakingLanguage : detectedLang));
-      if (i % 10 === 0) {
-        const action = segIsEnglish ? 'english-pass' : outputScript === 'roman' ? 'translit+translate' : 'translate-native';
-        console.log(`[pipeline] Segment ${i + 1}/${segments.length} — lang: ${segLang ?? 'null'}, script: ${segScriptLang ?? 'latin'}, action: ${action}`);
-      }
+          const segScriptLang = detectLanguageFromScript(seg.text);
+          // If the user's profile speaking_language is non-English, treat Latin-script
+          // segments as potentially Romanized native text (Tanglish/Hinglish) — Sarvam
+          // often misclassifies these as pure English at the audio level.
+          const userPrefsNonEnglish = !!speakingLanguage && speakingLanguage !== 'en' && speakingLanguage !== 'en-IN';
+          const segIsEnglish = !segScriptLang
+            && (detectedLang === 'en-IN' || !detectedLang)
+            && !userPrefsNonEnglish;
+          // When Sarvam detected a non-English language for the whole audio, Latin-script
+          // segments (Tanglish/Hinglish code-mixing) inherit that language so they get
+          // translated rather than silently skipped.
+          const isKnownNonEnglish = !!detectedLang && detectedLang !== 'unknown' && detectedLang !== 'en-IN' && detectedLang !== 'en';
+          const segLang = segScriptLang ?? (isKnownNonEnglish ? detectedLang : (userPrefsNonEnglish ? speakingLanguage : detectedLang));
 
-      if (segIsEnglish) {
-        // Even when classified English, Pipeline A may have produced a different
-        // English translation — that's a signal the source was actually non-English
-        // (Sarvam translate succeeded but Sarvam STT-language-detection misclassified).
-        const aMatch = findEnglishForSegment(seg.startSeconds);
-        const aText = aMatch.matched ? aMatch.english.trim() : '';
-        const ogText = seg.text.trim();
-        const differs = aText.length > 0
-          && aText.toLowerCase() !== ogText.toLowerCase()
-          && Math.abs(aText.length - ogText.length) > 3;
-        original = seg.text;
-        english = differs ? aMatch.english : seg.text;
-      } else if (outputScript === 'roman') {
-        // English from Pipeline A (preferred) or fallback to text translation
-        const match = findEnglishForSegment(seg.startSeconds);
-        english = match.matched
-          ? match.english
-          : await translateToEnglish(seg.text, segLang);
+          if (segIsEnglish) {
+            // Even when classified English, Pipeline A may have produced a different
+            // English translation — that's a signal the source was actually non-English
+            // (Sarvam translate succeeded but Sarvam STT-language-detection misclassified).
+            const aMatch = findEnglishForSegment(seg.startSeconds);
+            const aText = aMatch.matched ? aMatch.english.trim() : '';
+            const ogText = seg.text.trim();
+            const differs = aText.length > 0
+              && aText.toLowerCase() !== ogText.toLowerCase()
+              && Math.abs(aText.length - ogText.length) > 3;
+            original = seg.text;
+            english = differs ? aMatch.english : seg.text;
+          } else if (outputScript === 'roman') {
+            // English from Pipeline A (preferred) or fallback to text translation
+            const match = findEnglishForSegment(seg.startSeconds);
+            english = match.matched
+              ? match.english
+              : await translateToEnglish(seg.text, segLang);
 
-        // Skip transliteration when segment is already Roman or language is unknown/English
-        const skipTranslit = !segLang || segLang === 'en-IN' || segLang === 'en' || segLang === 'unknown';
-        if (skipTranslit) {
-          original = seg.text;
-        } else {
-          try {
-            original = await transliterateToRoman(seg.text, segLang);
-          } catch (err) {
-            console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
-            original = english;
+            // Skip transliteration when segment is already Roman or language is unknown/English
+            const skipTranslit = !segLang || segLang === 'en-IN' || segLang === 'en' || segLang === 'unknown';
+            if (skipTranslit) {
+              original = seg.text;
+            } else {
+              try {
+                original = await transliterateToRoman(seg.text, segLang);
+              } catch (err) {
+                console.error('[pipeline] Transliteration threw — falling back to English:', err instanceof Error ? err.message : err);
+                original = english;
+              }
+              original = await enforceRomanInvariant(seg.text, original, english, segLang);
+            }
+          } else {
+            // Non-roman output script — keep native, still get English from A
+            const match = findEnglishForSegment(seg.startSeconds);
+            english = match.matched
+              ? match.english
+              : await translateToEnglish(seg.text, segLang);
+            original = seg.text;
           }
-          original = await enforceRomanInvariant(seg.text, original, english, segLang);
-        }
-      } else {
-        // Non-roman output script — keep native, still get English from A
-        const match = findEnglishForSegment(seg.startSeconds);
-        english = match.matched
-          ? match.english
-          : await translateToEnglish(seg.text, segLang);
-        original = seg.text;
-      }
-      englishSegments.push(english);
+          englishSegments[i] = english;
 
-      await query(
-        `INSERT INTO transcripts
-           (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (meeting_id, segment_index) DO NOTHING`,
-        [meetingId, i, seg.startSeconds, original, english, seg.speaker]
+          await query(
+            `INSERT INTO transcripts
+               (meeting_id, segment_index, timestamp_seconds, original_text, english_text, speaker)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (meeting_id, segment_index) DO NOTHING`,
+            [meetingId, i, seg.startSeconds, original, english, seg.speaker]
+          );
+        })
       );
     }
 

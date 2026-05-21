@@ -24,11 +24,12 @@ export async function generateSummary(
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set');
 
-  // Truncate very long transcripts so the free model isn't overwhelmed and
-  // doesn't produce truncated (unparseable) JSON responses.
-  const MAX_TRANSCRIPT_CHARS = 7000;
+  // Truncate very long transcripts. Strategy: keep the first 12k chars (covers ~75 min)
+  // plus the last 8k chars (covers ~50 min from end) so summaries cover start and end
+  // of even a 2-hour meeting. Total 20k chars ≈ 5,000 tokens — within free model limits.
+  const MAX_TRANSCRIPT_CHARS = 20_000;
   const transcript = englishTranscript.length > MAX_TRANSCRIPT_CHARS
-    ? englishTranscript.slice(0, 5000) + '\n\n[...middle of meeting truncated for summary...]\n\n' + englishTranscript.slice(-2000)
+    ? englishTranscript.slice(0, 12_000) + '\n\n[...middle of meeting truncated for summary...]\n\n' + englishTranscript.slice(-8_000)
     : englishTranscript;
 
   const prompt = `You are a meeting notes assistant. Analyze the following meeting transcript and extract:

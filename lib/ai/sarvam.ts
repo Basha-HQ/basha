@@ -149,7 +149,7 @@ async function transcribeAudioBatch(
     throw new Error(`Sarvam batch start failed: ${startRes.status} ${e}`);
   }
 
-  // Step 5: Poll until Completed (max 4 min — must fit within Vercel's 300s maxDuration)
+  // Step 5: Poll until Completed (max 8 min — bot pipeline runs via after() outside response cycle)
   // Status response includes task-level details with output file names
   type JobDetail = {
     inputs: Array<{ file_name: string; file_id: string }>;
@@ -164,7 +164,7 @@ async function transcribeAudioBatch(
     total_files?: number;
   };
   let completedStatus: StatusResponse | null = null;
-  const pollDeadline = Date.now() + 4 * 60 * 1000;
+  const pollDeadline = Date.now() + 8 * 60 * 1000;
   const pollStart = Date.now();
   let pollCount = 0;
   while (Date.now() < pollDeadline) {
@@ -319,6 +319,8 @@ async function transcribeAndTranslateAudioBatch(
  * Returns English transcript + the detected source language code, which the
  * caller feeds into Pipeline B as a hint to force native-script transcription.
  */
+const SYNC_MAX_BYTES = 5 * 1024 * 1024; // 5 MB ≈ 30 s meeting audio — above this the sync endpoint triggers Azure WAF 403
+
 export async function transcribeAndTranslateAudio(
   audioBuffer: Buffer,
   fileName: string,
@@ -326,12 +328,17 @@ export async function transcribeAndTranslateAudio(
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
+  if (audioBuffer.byteLength > SYNC_MAX_BYTES) {
+    console.log(`[sarvam] Pipeline A buffer ${(audioBuffer.byteLength / 1024 / 1024).toFixed(1)} MB > 5 MB — using batch directly`);
+    return transcribeAndTranslateAudioBatch(apiKey, audioBuffer, fileName);
+  }
+
   try {
     console.log(`[sarvam] Pipeline A (STT-translate sync) for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB)`);
     return await transcribeAndTranslateAudioSync(apiKey, audioBuffer, fileName);
   } catch (syncErr) {
     const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-    if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size')) {
+    if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size') || msg.includes('403')) {
       console.log(`[sarvam] Pipeline A sync rejected, falling back to batch: ${msg}`);
       return transcribeAndTranslateAudioBatch(apiKey, audioBuffer, fileName);
     }
@@ -355,15 +362,20 @@ export async function transcribeAudio(
   const apiKey = process.env.SARVAM_AI_API_KEY;
   if (!apiKey) throw new Error('SARVAM_AI_API_KEY is not set');
 
+  if (audioBuffer.byteLength > SYNC_MAX_BYTES) {
+    console.log(`[sarvam] Buffer ${(audioBuffer.byteLength / 1024 / 1024).toFixed(1)} MB > 5 MB — using batch directly`);
+    return transcribeAudioBatch(apiKey, audioBuffer, fileName, sttMode, languageCode);
+  }
+
   // Try sync API first — it handles WebM/Opus natively via multipart upload
   try {
     console.log(`[sarvam] Trying sync STT for ${fileName} (${(audioBuffer.byteLength / 1024).toFixed(0)} KB) mode=${sttMode} lang=${languageCode ?? 'auto'}`);
     return await transcribeAudioSync(apiKey, audioBuffer, fileName, sttMode, languageCode);
   } catch (syncErr) {
     const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-    // If sync fails due to duration limit, fall back to batch
-    if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size')) {
-      console.log(`[sarvam] Sync STT rejected (likely >30s), falling back to batch: ${msg}`);
+    // If sync fails due to duration or WAF block, fall back to batch
+    if (msg.includes('duration') || msg.includes('too long') || msg.includes('413') || msg.includes('file size') || msg.includes('403')) {
+      console.log(`[sarvam] Sync STT rejected, falling back to batch: ${msg}`);
       return transcribeAudioBatch(apiKey, audioBuffer, fileName, sttMode, languageCode);
     }
     // Any other sync error — re-throw

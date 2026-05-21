@@ -14,6 +14,8 @@ interface MeetingRow {
   source_language: string;
 }
 
+export const maxDuration = 300;
+
 // POST /api/meetings/[id]/process — trigger the AI processing pipeline
 export async function POST(
   _req: NextRequest,
