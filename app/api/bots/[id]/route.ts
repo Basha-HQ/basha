@@ -3,7 +3,7 @@
  * DELETE /api/bots/:id  — remove bot from meeting
  */
 
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { queryOne, query } from '@/lib/db';
 
@@ -14,7 +14,7 @@ import {
   getLatestStatus,
   mapRecallStatus,
 } from '@/lib/recall/client';
-import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
+import { type BotRow } from '@/lib/bot/pipeline';
 import { sendBotFailureEmail } from '@/lib/email';
 
 // ── GET — poll status ─────────────────────────────────────────────────────────
@@ -50,19 +50,14 @@ export async function GET(
       const recallStatus = getLatestStatus(recallBot);
       const mappedStatus = mapRecallStatus(recallStatus);
 
-      if (mappedStatus === 'done') {
-        // Mark as processing immediately so the next poll doesn't double-trigger
+      if (mappedStatus === 'done' && !['processing', 'completed', 'failed'].includes(bot.status)) {
+        // Mark as processing so the UI shows progress while the webhook runs the pipeline
         await query(
           `UPDATE bots SET status = 'processing', updated_at = NOW() WHERE id = $1`,
           [bot.id]
         );
         bot.status = 'processing';
-        // Run pipeline after the response — keeps Vercel function alive past the 202
-        after(
-          handleRecordingReady(bot, recallBot, session.user.id).catch((err) => {
-            console.error('[api/bots] Pipeline error:', err);
-          })
-        );
+        // Pipeline is triggered server-side by the Recall.ai webhook — no after() needed here
       } else if (mappedStatus === 'failed') {
         const errorMsg = recallBot.status_changes?.at(-1)?.message ?? 'Bot failed';
         await query(

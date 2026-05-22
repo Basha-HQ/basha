@@ -18,7 +18,7 @@
  * }
  */
 
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { queryOne, query } from '@/lib/db';
 import { getBot as getRecallBot } from '@/lib/recall/client';
 import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
@@ -99,14 +99,15 @@ export async function POST(req: NextRequest) {
         `UPDATE bots SET status = 'processing', updated_at = NOW() WHERE id = $1`,
         [bot.id]
       );
-      // Run pipeline after the 200 response — keeps Vercel function alive past the response
-      after(
-        handleRecordingReady(bot, recallBot, bot.user_id).catch((err) => {
-          console.error('[webhook/recall] Pipeline error:', err);
-        })
-      );
+      // Run pipeline inline — maxDuration=300 gives 5 minutes, enough for any meeting
+      await handleRecordingReady(bot, recallBot, bot.user_id);
     } catch (err) {
-      console.error('[webhook/recall] Setup error:', err);
+      console.error('[webhook/recall] Pipeline error:', err);
+      await query(
+        `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
+        [String(err), bot.id]
+      );
+      await query(`UPDATE meetings SET status = 'failed' WHERE id = $1`, [bot.meeting_id]);
       return NextResponse.json({ error: 'Pipeline error' }, { status: 500 });
     }
   } else if (statusCode === 'fatal' || statusCode === 'analysis_failed') {
