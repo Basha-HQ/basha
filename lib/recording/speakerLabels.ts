@@ -205,6 +205,18 @@ export async function resolveAndPersistSpeakerLabels(
     console.log('[speakerLabels] Solo-speaker fallback — using owner name:', resolved);
   }
 
+  // (d) Generic fallback — assign "Speaker N" to any SPEAKER_XX that still has no
+  // label. This ensures no speaker ever renders blank in the transcript UI.
+  // Users can rename them via the speaker-label editor at any time.
+  for (const speakerId of actualSpeakerIds) {
+    if (!resolved?.[speakerId]) {
+      if (!resolved) resolved = {};
+      const num = parseInt(speakerId.replace(/^SPEAKER_0*/i, '') || '0', 10) + 1;
+      resolved[speakerId] = `Speaker ${num}`;
+      console.log(`[speakerLabels] Generic fallback — ${speakerId} → "Speaker ${num}"`);
+    }
+  }
+
   if (resolved && Object.keys(resolved).length > 0) {
     // Only persist if something actually changed — avoids redundant writes on every page load.
     const current = meta.speaker_labels && typeof meta.speaker_labels === 'object'

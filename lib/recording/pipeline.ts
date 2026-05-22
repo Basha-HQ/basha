@@ -210,24 +210,40 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     });
     console.log(`[pipeline] Segments after dedup: ${segments.length} (was ${rawBSegments.length})`);
 
-    // Build a timestamp index of Pipeline A entries so we can match each
-    // B-segment to A's English with a ±2s tolerance window. Used only for
-    // non-English meetings; pure English just reuses A's text directly.
-    const aIndex: Array<{ sec: number; text: string }> = pipelineA.diarized_entries?.length
-      ? pipelineA.diarized_entries.map((e) => {
-          const raw = e as unknown as Record<string, unknown>;
-          return { sec: diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
-        })
-      : [];
+    // Build a timestamp index of Pipeline A entries (sorted ascending) and
+    // pre-compute a 1:1 sequential match for each B-segment before the concurrent
+    // batch loop runs. Sequential matching prevents multiple B-segments from
+    // "stealing" the same A entry when segments are close in time, which was the
+    // cause of the transcript↔translation mismatch bug.
+    const sortedAIndex: Array<{ sec: number; text: string }> = (
+      pipelineA.diarized_entries?.length
+        ? pipelineA.diarized_entries.map((e) => {
+            const raw = e as unknown as Record<string, unknown>;
+            return { sec: diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
+          })
+        : []
+    ).sort((a, b) => a.sec - b.sec);
 
-    function findEnglishForSegment(startSec: number): { english: string; matched: boolean } {
-      let best: { sec: number; text: string; dist: number } | null = null;
-      for (const a of aIndex) {
-        const dist = Math.abs(a.sec - startSec);
-        if (dist <= 2 && (!best || dist < best.dist)) best = { ...a, dist };
+    // Pre-compute matches sequentially so the concurrent batch loop can read them
+    // without racing on shared state. For each B-segment we advance a pointer past
+    // any A entries that are >3s behind, then take the next A entry if it is within
+    // 3s of the B-segment's timestamp. An A entry is consumed at most once.
+    let aPointer = 0;
+    const englishMatches: Array<{ english: string; matched: boolean }> = segments.map((seg) => {
+      while (aPointer < sortedAIndex.length && sortedAIndex[aPointer].sec < seg.startSeconds - 3) {
+        aPointer++;
       }
-      return best ? { english: best.text, matched: true } : { english: '', matched: false };
-    }
+      if (aPointer >= sortedAIndex.length) return { english: '', matched: false };
+      const candidate = sortedAIndex[aPointer];
+      if (Math.abs(candidate.sec - seg.startSeconds) > 3) return { english: '', matched: false };
+      // Sanity check: reject when A text is tiny (e.g. "Hmm") but B segment is a full sentence
+      if (candidate.text.trim().length < 5 && seg.text.trim().length > 30) {
+        aPointer++; // consume so it doesn't pollute the next segment either
+        return { english: '', matched: false };
+      }
+      aPointer++;
+      return { english: candidate.text, matched: true };
+    });
 
     // ── Per-segment processing ───────────────────────────────────────────────
     // Batched parallel processing (10 at a time) — each segment's translate +
@@ -258,12 +274,12 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
           const isKnownNonEnglish = !!detectedLang && detectedLang !== 'unknown' && detectedLang !== 'en-IN' && detectedLang !== 'en';
           const segLang = segScriptLang ?? (isKnownNonEnglish ? detectedLang : (userPrefsNonEnglish ? speakingLanguage : detectedLang));
 
+          const preMatch = englishMatches[i];
           if (segIsEnglish) {
             // Even when classified English, Pipeline A may have produced a different
             // English translation — that's a signal the source was actually non-English
             // (Sarvam translate succeeded but Sarvam STT-language-detection misclassified).
-            const aMatch = findEnglishForSegment(seg.startSeconds);
-            const aText = aMatch.matched ? aMatch.english.trim() : '';
+            const aText = preMatch.matched ? preMatch.english.trim() : '';
             const ogText = seg.text.trim();
             const differs = aText.length > 0
               && aText.toLowerCase() !== ogText.toLowerCase()
@@ -271,12 +287,11 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
               && ogText.split(/\s+/).filter(Boolean).length >= 3
               && aText.length <= ogText.length * 4;
             original = seg.text;
-            english = differs ? aMatch.english : seg.text;
+            english = differs ? preMatch.english : seg.text;
           } else if (outputScript === 'roman') {
             // English from Pipeline A (preferred) or fallback to text translation
-            const match = findEnglishForSegment(seg.startSeconds);
-            english = match.matched
-              ? match.english
+            english = preMatch.matched
+              ? preMatch.english
               : await translateToEnglish(seg.text, segLang);
 
             // Skip transliteration when segment is already Roman or language is unknown/English
@@ -294,9 +309,8 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
             }
           } else {
             // Non-roman output script — keep native, still get English from A
-            const match = findEnglishForSegment(seg.startSeconds);
-            english = match.matched
-              ? match.english
+            english = preMatch.matched
+              ? preMatch.english
               : await translateToEnglish(seg.text, segLang);
             original = seg.text;
           }
@@ -458,13 +472,33 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
       return !isDuplicate;
     });
 
-    // Index Pipeline A's diarized entries for ±2s timestamp matching
-    const aIndex: Array<{ sec: number; text: string }> = pipelineA.diarized_entries?.length
-      ? pipelineA.diarized_entries.map((e) => {
-          const raw = e as unknown as Record<string, unknown>;
-          return { sec: chunkStartSeconds + diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
-        })
-      : [];
+    // Build a sequential Pipeline A index (sorted by timestamp) and pre-compute
+    // a 1:1 match for each deduplicated chunk segment. This avoids the timestamp
+    // proximity race where multiple B-segments claim the same A entry.
+    const chunkSortedAIndex: Array<{ sec: number; text: string }> = (
+      pipelineA.diarized_entries?.length
+        ? pipelineA.diarized_entries.map((e) => {
+            const raw = e as unknown as Record<string, unknown>;
+            return { sec: chunkStartSeconds + diarizedStartSec({ ...e, ...raw }), text: e.transcript ?? '' };
+          })
+        : []
+    ).sort((a, b) => a.sec - b.sec);
+
+    let chunkAPointer = 0;
+    const chunkEnglishMatches: Array<{ english: string; matched: boolean }> = dedupedChunk.map((seg) => {
+      while (chunkAPointer < chunkSortedAIndex.length && chunkSortedAIndex[chunkAPointer].sec < seg.startSeconds - 3) {
+        chunkAPointer++;
+      }
+      if (chunkAPointer >= chunkSortedAIndex.length) return { english: '', matched: false };
+      const candidate = chunkSortedAIndex[chunkAPointer];
+      if (Math.abs(candidate.sec - seg.startSeconds) > 3) return { english: '', matched: false };
+      if (candidate.text.trim().length < 5 && seg.text.trim().length > 30) {
+        chunkAPointer++;
+        return { english: '', matched: false };
+      }
+      chunkAPointer++;
+      return { english: candidate.text, matched: true };
+    });
 
     // Continue numbering from the last inserted segment for this meeting
     const idxRow = await queryOne<{ max_index: number }>(
@@ -490,25 +524,20 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
         console.log(`[pipeline:chunk] Segment ${i + 1}/${dedupedChunk.length} — lang: ${segLang ?? 'null'}, script: ${segScriptLang ?? 'latin'}, action: ${action}`);
       }
 
-      // Find closest A-segment by timestamp (±2s) — shared across branches below
-      let aMatch: { sec: number; text: string; dist: number } | null = null;
-      for (const a of aIndex) {
-        const dist = Math.abs(a.sec - seg.startSeconds);
-        if (dist <= 2 && (!aMatch || dist < aMatch.dist)) aMatch = { ...a, dist };
-      }
+      const chunkPreMatch = chunkEnglishMatches[i];
 
       if (segIsEnglish) {
         // Even when classified English, Pipeline A may have produced a different
         // English translation — that's a signal the source was actually non-English.
-        const aText = aMatch ? aMatch.text.trim() : '';
+        const aText = chunkPreMatch.matched ? chunkPreMatch.english.trim() : '';
         const ogText = seg.text.trim();
         const differs = aText.length > 0
           && aText.toLowerCase() !== ogText.toLowerCase()
           && Math.abs(aText.length - ogText.length) > 3;
         original = seg.text;
-        english = differs ? aMatch!.text : seg.text;
+        english = differs ? chunkPreMatch.english : seg.text;
       } else if (outputScript === 'roman') {
-        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
+        english = chunkPreMatch.matched ? chunkPreMatch.english : await translateToEnglish(seg.text, segLang);
 
         const skipTranslit = !segLang || segLang === 'en-IN' || segLang === 'en' || segLang === 'unknown';
         if (skipTranslit) {
@@ -523,7 +552,7 @@ export async function processAudioChunk(input: ChunkInput): Promise<void> {
           original = await enforceRomanInvariant(seg.text, original, english, segLang);
         }
       } else {
-        english = aMatch ? aMatch.text : await translateToEnglish(seg.text, segLang);
+        english = chunkPreMatch.matched ? chunkPreMatch.english : await translateToEnglish(seg.text, segLang);
         original = seg.text;
       }
 
