@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/config';
-import { queryOne } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { processAudioForMeeting } from '@/lib/recording/pipeline';
 import { readFile } from 'fs/promises';
 import path from 'path';
@@ -10,6 +10,7 @@ interface MeetingRow {
   id: string;
   title: string;
   audio_path: string;
+  audio_data: Buffer | null;
   status: string;
   source_language: string;
 }
@@ -28,8 +29,11 @@ export async function POST(
 
   const { id } = await params;
 
+  const body = await _req.json().catch(() => ({}));
+  const source = body?.source as string | undefined;
+
   const meeting = await queryOne<MeetingRow>(
-    'SELECT id, title, audio_path, status, source_language FROM meetings WHERE id = $1 AND user_id = $2',
+    'SELECT id, title, audio_path, audio_data, status, source_language FROM meetings WHERE id = $1 AND user_id = $2',
     [id, session.user.id]
   );
 
@@ -42,11 +46,11 @@ export async function POST(
     return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
   }
 
-  if (!meeting.audio_path) {
+  if (source !== 'db' && !meeting.audio_path) {
     return NextResponse.json({ error: 'No audio file uploaded yet' }, { status: 400 });
   }
 
-  if (meeting.status === 'processing') {
+  if (source !== 'db' && meeting.status === 'processing') {
     return NextResponse.json({ error: 'Already processing' }, { status: 409 });
   }
 
@@ -64,7 +68,16 @@ export async function POST(
       return allowedDirs.some((dir) => resolved.startsWith(dir + path.sep) || resolved === dir);
     }
 
-    if (meeting.audio_path.startsWith('http')) {
+    if (source === 'db') {
+      if (!meeting.audio_data) {
+        return NextResponse.json({ error: 'No audio saved in DB for this meeting' }, { status: 404 });
+      }
+      // Clear stale transcripts and reset status before retrigger
+      await query('DELETE FROM transcripts WHERE meeting_id = $1', [id]);
+      await query("UPDATE meetings SET status = 'pending', summary = NULL WHERE id = $1", [id]);
+      audioBuffer = Buffer.from(meeting.audio_data);
+      fileName = 'audio.webm';
+    } else if (meeting.audio_path.startsWith('http')) {
       const res = await fetch(meeting.audio_path);
       if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status}`);
       audioBuffer = Buffer.from(await res.arrayBuffer());
