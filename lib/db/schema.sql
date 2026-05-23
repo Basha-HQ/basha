@@ -255,3 +255,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS bot_display_name TEXT DEFAULT 'Basha 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_join_mode TEXT DEFAULT 'off'
   CHECK (auto_join_mode IN ('off', 'all', 'organizer_only'));
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_calendar_sync TIMESTAMPTZ;
+
+-- ── Pipeline progress tracking (2026-05-23) ─────────────────────────────────
+-- Sub-phase during status='processing' so the UI can show progressive feedback
+-- ("Transcribing…" → "Translating…" → "Summarizing…") instead of a frozen state.
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS processing_stage TEXT;

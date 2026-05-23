@@ -1,74 +1,78 @@
 /**
  * POST /api/webhooks/recall — Recall.ai webhook receiver
  *
- * Recall.ai calls this endpoint when a bot's status changes.
- * This allows the pipeline to run server-side without needing an active browser tab.
+ * Recall.ai (via Svix) fires granular events when a bot transitions state.
+ * We listen for two:
+ *   - bot.done    → recording is ready to download → run the pipeline
+ *   - bot.fatal   → bot died → mark meeting failed + notify user
  *
- * Set RECALL_WEBHOOK_SECRET in .env.local for signature verification (recommended in prod).
+ * All other events are accepted and ignored (so the 200 response prevents
+ * Svix retries).
  *
- * Recall.ai webhook payload:
- * {
- *   "event": "bot.status_change",
- *   "data": {
- *     "bot": {
- *       "id": "<recall_bot_id>",
- *       "status": { "code": "done" | "fatal" | ... }
- *     }
- *   }
- * }
+ * RECALL_WEBHOOK_SECRET must be set to the `whsec_...` secret shown in the
+ * Recall.ai dashboard for this endpoint. The signature is verified using
+ * Svix's standard scheme (svix-id, svix-timestamp, svix-signature headers).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
+import { Webhook, WebhookVerificationError } from 'svix';
 import { queryOne, query } from '@/lib/db';
 import { getBot as getRecallBot } from '@/lib/recall/client';
 import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
+import { sendBotFailureEmail } from '@/lib/email';
 
 export const maxDuration = 300;
 
+type RecallWebhookPayload = {
+  event: string;
+  data?: {
+    bot?: { id?: string };
+  };
+};
+
 export async function POST(req: NextRequest) {
-  // Webhook secret verification — required in production
   const secret = process.env.RECALL_WEBHOOK_SECRET;
   if (!secret) {
     console.error('[webhook/recall] RECALL_WEBHOOK_SECRET is not configured — rejecting request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const signature = req.headers.get('x-recall-signature') ?? '';
-  if (signature !== secret) {
-    console.warn('[webhook/recall] Invalid signature — request rejected');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
-  let payload: {
-    event: string;
-    data?: {
-      bot?: {
-        id?: string;
-        status?: { code?: string };
-      };
-    };
+  // Svix verifies against the EXACT raw body bytes — must read text before JSON.parse
+  const rawBody = await req.text();
+  const svixHeaders = {
+    'svix-id': req.headers.get('svix-id') ?? '',
+    'svix-timestamp': req.headers.get('svix-timestamp') ?? '',
+    'svix-signature': req.headers.get('svix-signature') ?? '',
   };
 
+  let payload: RecallWebhookPayload;
   try {
-    payload = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    const wh = new Webhook(secret);
+    payload = wh.verify(rawBody, svixHeaders) as RecallWebhookPayload;
+  } catch (err) {
+    if (err instanceof WebhookVerificationError) {
+      console.warn('[webhook/recall] Svix signature verification failed:', err.message);
+    } else {
+      console.warn('[webhook/recall] Webhook verification error:', err);
+    }
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
-  // Only handle bot status change events
-  if (payload.event !== 'bot.status_change') {
+  const eventName = payload.event;
+  const recallBotId = payload.data?.bot?.id;
+
+  if (!eventName || !recallBotId) {
+    return NextResponse.json({ error: 'Missing event or bot id' }, { status: 400 });
+  }
+
+  console.log(`[webhook/recall] event=${eventName} recall_bot_id=${recallBotId}`);
+
+  // Only act on bot.done and bot.fatal — everything else just acks
+  if (eventName !== 'bot.done' && eventName !== 'bot.fatal') {
     return NextResponse.json({ ok: true });
   }
 
-  const recallBotId = payload.data?.bot?.id;
-  const statusCode = payload.data?.bot?.status?.code;
-
-  if (!recallBotId || !statusCode) {
-    return NextResponse.json({ error: 'Missing bot id or status code' }, { status: 400 });
-  }
-
-  console.log(`[webhook/recall] event=bot.status_change recall_bot_id=${recallBotId} status=${statusCode}`);
-
-  // Look up our bot by the Recall.ai bot ID
   const bot = await queryOne<BotRow & { user_id: string }>(
     `SELECT b.id, b.meeting_id, b.meeting_url, b.recall_bot_id, b.status, b.error, b.created_at, b.updated_at,
             m.user_id
@@ -79,52 +83,84 @@ export async function POST(req: NextRequest) {
   );
 
   if (!bot) {
-    // Bot not in our DB — ignore (might be from another environment)
     console.warn(`[webhook/recall] No bot found for recall_bot_id=${recallBotId}`);
     return NextResponse.json({ ok: true });
   }
 
-  if (statusCode === 'done') {
-    // Skip if already processing or completed (idempotency guard)
-    if (['processing', 'completed'].includes(bot.status)) {
-      console.log(`[webhook/recall] Bot ${bot.id} already ${bot.status} — skipping`);
+  if (eventName === 'bot.done') {
+    // Atomic CAS — only the first request to claim this row runs the pipeline.
+    // Guards against the webhook + polling path racing each other.
+    const claimed = await queryOne<{ id: string }>(
+      `UPDATE bots SET status = 'processing', updated_at = NOW()
+       WHERE id = $1 AND status NOT IN ('processing', 'completed', 'failed')
+       RETURNING id`,
+      [bot.id]
+    );
+
+    if (!claimed) {
+      console.log(`[webhook/recall] Bot ${bot.id} already claimed by another path — skipping`);
       return NextResponse.json({ ok: true });
     }
 
+    // Fetch full Recall.ai bot (needed for recordings array) before responding
+    let recallBot;
     try {
-      // Fetch full bot data from Recall.ai (need recordings array for download URL)
-      const recallBot = await getRecallBot(recallBotId);
-      // Mark as processing before responding so Recall.ai doesn't re-send the webhook
-      await query(
-        `UPDATE bots SET status = 'processing', updated_at = NOW() WHERE id = $1`,
-        [bot.id]
-      );
-      // Run pipeline inline — maxDuration=300 gives 5 minutes, enough for any meeting
-      await handleRecordingReady(bot, recallBot, bot.user_id);
+      recallBot = await getRecallBot(recallBotId);
     } catch (err) {
-      console.error('[webhook/recall] Pipeline error:', err);
+      console.error('[webhook/recall] Failed to fetch Recall.ai bot:', err);
       await query(
         `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
         [String(err), bot.id]
       );
       await query(`UPDATE meetings SET status = 'failed' WHERE id = $1`, [bot.meeting_id]);
-      return NextResponse.json({ error: 'Pipeline error' }, { status: 500 });
+      return NextResponse.json({ error: 'Recall.ai fetch failed' }, { status: 500 });
     }
-  } else if (statusCode === 'fatal' || statusCode === 'analysis_failed') {
-    // Mark bot and meeting as failed if not already terminal
-    if (!['completed', 'failed'].includes(bot.status)) {
-      const errorMsg = `Recall.ai bot ${statusCode}`;
-      await query(
-        `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
-        [errorMsg, bot.id]
-      );
-      await query(
-        `UPDATE meetings SET status = 'failed' WHERE id = $1`,
-        [bot.meeting_id]
-      );
-      console.log(`[webhook/recall] Marked bot ${bot.id} and meeting ${bot.meeting_id} as failed`);
-    }
+
+    // Fire-and-forget — Recall.ai gets a 200 immediately, pipeline runs in background
+    after(async () => {
+      try {
+        await handleRecordingReady(bot, recallBot!, bot.user_id);
+      } catch (err) {
+        console.error(`[webhook/recall] Pipeline error for meeting ${bot.meeting_id}:`, err);
+        await query(
+          `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
+          [String(err), bot.id]
+        ).catch(console.error);
+        await query(
+          `UPDATE meetings SET status = 'failed', processing_stage = NULL WHERE id = $1`,
+          [bot.meeting_id]
+        ).catch(console.error);
+      }
+    });
+
+    return NextResponse.json({ ok: true });
   }
 
+  // bot.fatal
+  if (['completed', 'failed'].includes(bot.status)) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const errorMsg = `Recall.ai bot ${eventName}`;
+  await query(
+    `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
+    [errorMsg, bot.id]
+  );
+  await query(
+    `UPDATE meetings SET status = 'failed', processing_stage = NULL WHERE id = $1`,
+    [bot.meeting_id]
+  );
+
+  // Notify user — fire-and-forget
+  const userRow = await queryOne<{ email: string; name: string; title: string }>(
+    `SELECT u.email, u.name, m.title FROM users u JOIN meetings m ON m.user_id = u.id WHERE m.id = $1`,
+    [bot.meeting_id]
+  ).catch(() => null);
+  if (userRow) {
+    sendBotFailureEmail(userRow.email, userRow.name, userRow.title ?? 'Your Meeting', errorMsg)
+      .catch(console.error);
+  }
+
+  console.log(`[webhook/recall] Marked bot ${bot.id} and meeting ${bot.meeting_id} as failed`);
   return NextResponse.json({ ok: true });
 }

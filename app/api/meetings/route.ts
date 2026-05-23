@@ -10,7 +10,7 @@ export async function GET() {
   }
 
   const meetings = await query(
-    `SELECT id, title, meeting_link, platform, status, duration, created_at, completed_at
+    `SELECT id, title, meeting_link, platform, status, duration, created_at, completed_at, processing_stage
      FROM meetings
      WHERE user_id = $1
      ORDER BY created_at DESC`,

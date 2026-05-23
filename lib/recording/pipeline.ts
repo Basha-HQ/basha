@@ -140,20 +140,28 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
   const pipelineStart = Date.now();
   console.log(`[pipeline] Starting pipeline for meeting ${meetingId} — file: ${fileName}, size: ${(audioBuffer.byteLength / 1024).toFixed(0)}KB`);
 
-  console.log(`[pipeline] Meeting ${meetingId} status → processing`);
+  console.log(`[pipeline] Meeting ${meetingId} status → processing (stage: transcribing)`);
   await query(
-    `UPDATE meetings SET status = 'processing' WHERE id = $1`,
+    `UPDATE meetings SET status = 'processing', processing_stage = 'transcribing' WHERE id = $1`,
     [meetingId]
   );
 
   let step = 'init';
   try {
-    // ── Pipeline A — STT-translate ────────────────────────────────────────────
-    // Sarvam's /speech-to-text-translate auto-detects the spoken language from
-    // the audio and returns an English translation. The detected `language_code`
-    // becomes the canonical hint for Pipeline B. No browser locale, no sticky
-    // preference — each meeting is detected fresh from the audio.
-    const pipelineA = await withSarvamRetry(() => transcribeAndTranslateAudio(audioBuffer, fileName));
+    // ── Pipelines A + B run in parallel ─────────────────────────────────────
+    // A: STT-translate → English transcript + language detection
+    // B: STT → native-script transcript + diarization timeline
+    //
+    // These were sequential — but they're independent (B's language hint is a
+    // soft optimization, not a requirement). Running in parallel cuts the worst-
+    // case Sarvam wait from ~16 min (sequential batch jobs) to ~8 min.
+    const sarvamStart = Date.now();
+    const [pipelineA, pipelineB] = await Promise.all([
+      withSarvamRetry(() => transcribeAndTranslateAudio(audioBuffer, fileName)),
+      withSarvamRetry(() => transcribeAudio(audioBuffer, fileName, 'transcribe')),
+    ]);
+    console.log(`[pipeline] Parallel Sarvam complete in ${((Date.now() - sarvamStart) / 1000).toFixed(1)}s`);
+
     const detectedLang =
       pipelineA.language_code && pipelineA.language_code !== 'unknown'
         ? pipelineA.language_code
@@ -161,18 +169,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     console.log('[pipeline] Pipeline A — language:', detectedLang,
       '| english length:', pipelineA.transcript?.length,
       '| diarized:', pipelineA.diarized_entries?.length ?? 0);
-
-    await persistDetectedLanguage(meetingId, detectedLang);
-
-    // ── Pipeline B — STT (transcribe) — always runs ──────────────────────────
-    // Run unconditionally even when detectedLang === 'en-IN': Sarvam frequently
-    // misclassifies code-mixed Tanglish/Hinglish as pure English. Per-segment
-    // detectLanguageFromScript below handles truly pure-English segments cheaply.
-    const pipelineB = (detectedLang === 'en-IN' || !detectedLang)
-      ? await withSarvamRetry(() => transcribeAudio(audioBuffer, fileName, 'transcribe'))
-      : await withSarvamRetry(() => transcribeAudio(audioBuffer, fileName, 'transcribe', detectedLang!));
     console.log('[pipeline] Pipeline B — native transcript length:', pipelineB.transcript?.length,
       '| diarized:', pipelineB.diarized_entries?.length ?? 0);
+
+    await persistDetectedLanguage(meetingId, detectedLang);
 
     // Speaker label resolution from B (canonical diarization timeline)
     if (pipelineB.diarized_entries?.length) {
@@ -249,6 +249,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     // Batched parallel processing (10 at a time) — each segment's translate +
     // transliterate calls are independent so we run them concurrently. English-only
     // segments skip all API calls so the concurrency only fires where it matters.
+    await query(
+      `UPDATE meetings SET processing_stage = 'translating' WHERE id = $1`,
+      [meetingId]
+    );
     const SEGMENT_BATCH = 10;
     const englishSegments: string[] = new Array(segments.length).fill('');
     for (let batchStart = 0; batchStart < segments.length; batchStart += SEGMENT_BATCH) {
@@ -331,6 +335,10 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
 
     // 4. Fetch title for summary context
     step = 'summary';
+    await query(
+      `UPDATE meetings SET processing_stage = 'summarizing' WHERE id = $1`,
+      [meetingId]
+    );
     const meeting = await queryOne<{ title: string }>(
       'SELECT title FROM meetings WHERE id = $1',
       [meetingId]
@@ -373,7 +381,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     console.log(`[pipeline] Meeting ${meetingId} status → completed`);
     await query(
       `UPDATE meetings
-       SET status = 'completed', summary = $1, source_language = $3, completed_at = NOW()${effectiveTitle ? ', title = $4' : ''}
+       SET status = 'completed', processing_stage = NULL, summary = $1, source_language = $3, completed_at = NOW()${effectiveTitle ? ', title = $4' : ''}
        WHERE id = $2`,
       effectiveTitle
         ? [JSON.stringify(summary), meetingId, effectiveLanguage, effectiveTitle]
@@ -402,7 +410,7 @@ export async function processAudioForMeeting(input: ProcessingInput): Promise<vo
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[pipeline] Pipeline failed for meeting ${meetingId} at step "${step}": ${msg}`);
     await query(
-      `UPDATE meetings SET status = 'failed' WHERE id = $1`,
+      `UPDATE meetings SET status = 'failed', processing_stage = NULL WHERE id = $1`,
       [meetingId]
     );
     throw err; // re-throw so callers can update their own status tables (e.g. bots)

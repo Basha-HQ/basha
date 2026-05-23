@@ -11,6 +11,7 @@ interface Meeting {
   duration: number | null;
   source_language: string | null;
   summary: string | null;
+  processing_stage?: string | null;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -68,11 +69,21 @@ function platformLabel(platform: string): string {
   return 'Other';
 }
 
-function statusConfig(status: string) {
+function statusConfig(status: string, stage?: string | null) {
   switch (status) {
     case 'completed': return { label: 'Completed', dot: '#34d399', color: 'rgba(52,211,153,0.8)' };
-    case 'processing': return { label: 'Processing', dot: '#818cf8', color: 'rgba(129,140,248,0.8)', pulse: true };
-    case 'recording': return { label: 'Recording', dot: '#f59e0b', color: 'rgba(245,158,11,0.8)', pulse: true };
+    case 'processing': {
+      // NN Group AI-pattern research: progress indication ("Thinking… Searching… Writing…")
+      // reduces perceived wait time vs. a static "Processing" label. We map the
+      // pipeline's internal stage to user-facing copy.
+      const stageLabel =
+        stage === 'transcribing' ? 'Transcribing'
+        : stage === 'translating' ? 'Translating'
+        : stage === 'summarizing' ? 'Summarizing'
+        : 'Processing';
+      return { label: stageLabel, dot: '#818cf8', color: 'rgba(129,140,248,0.85)', pulse: true, animate: true };
+    }
+    case 'recording': return { label: 'Recording', dot: '#f59e0b', color: 'rgba(245,158,11,0.8)', pulse: true, animate: true };
     case 'failed': return { label: 'Failed', dot: '#fb7185', color: 'rgba(251,113,133,0.8)' };
     default: return { label: status.charAt(0).toUpperCase() + status.slice(1), dot: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.35)' };
   }
@@ -120,7 +131,7 @@ function PlatformIcon({ platform }: { platform: string }) {
 }
 
 export function MeetingCard({ meeting }: { meeting: Meeting }) {
-  const status = statusConfig(meeting.status);
+  const status = statusConfig(meeting.status, meeting.processing_stage);
   const duration = formatDuration(meeting.duration);
   const langLabel = languageBadge(meeting.source_language);
   const overview = extractOverview(meeting.summary);
@@ -174,13 +185,46 @@ export function MeetingCard({ meeting }: { meeting: Meeting }) {
             style={{
               background: status.dot,
               boxShadow: status.pulse ? `0 0 0 3px ${status.dot}33` : undefined,
+              animation: status.animate ? 'basha-pulse-dot 1.4s ease-in-out infinite' : undefined,
             }}
           />
-          <span className="text-xs font-medium" style={{ color: status.color }}>
+          <span
+            className="text-xs font-medium inline-flex items-center"
+            style={{ color: status.color }}
+            aria-live={status.animate ? 'polite' : undefined}
+          >
             {status.label}
+            {status.animate && (
+              <span aria-hidden="true" className="inline-flex ml-0.5">
+                <span className="basha-loading-dot" style={{ background: status.dot }} />
+                <span className="basha-loading-dot" style={{ background: status.dot, animationDelay: '0.15s' }} />
+                <span className="basha-loading-dot" style={{ background: status.dot, animationDelay: '0.3s' }} />
+              </span>
+            )}
           </span>
         </div>
       </div>
+      <style jsx>{`
+        @keyframes basha-pulse-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        @keyframes basha-loading-dot-bounce {
+          0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-1px); }
+        }
+        .basha-loading-dot {
+          display: inline-block;
+          width: 2px;
+          height: 2px;
+          border-radius: 9999px;
+          margin: 0 1px;
+          animation: basha-loading-dot-bounce 1.2s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .basha-loading-dot { animation: none; opacity: 0.7; }
+        }
+      `}</style>
     </Link>
   );
 }

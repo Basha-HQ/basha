@@ -14,6 +14,7 @@ interface Meeting {
   duration: number | null;
   source_language: string | null;
   summary: string | null;
+  processing_stage: string | null;
 }
 
 export const metadata = { title: 'Dashboard — Basha' };
@@ -48,7 +49,7 @@ export default async function DashboardPage() {
   const autoJoinMode = calendarRow?.auto_join_mode ?? 'off';
 
   const recentMeetings = await query<Meeting>(
-    `SELECT id, title, platform, status, created_at, duration, source_language, summary
+    `SELECT id, title, platform, status, created_at, duration, source_language, summary, processing_stage
      FROM meetings
      WHERE user_id = $1
      ORDER BY created_at DESC

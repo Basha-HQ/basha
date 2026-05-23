@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { queryOne, query } from '@/lib/db';
 
@@ -14,7 +15,7 @@ import {
   getLatestStatus,
   mapRecallStatus,
 } from '@/lib/recall/client';
-import { type BotRow } from '@/lib/bot/pipeline';
+import { handleRecordingReady, type BotRow } from '@/lib/bot/pipeline';
 import { sendBotFailureEmail } from '@/lib/email';
 
 // ── GET — poll status ─────────────────────────────────────────────────────────
@@ -30,8 +31,9 @@ export async function GET(
 
   const { id } = await params;
 
-  const bot = await queryOne<BotRow>(
-    `SELECT b.id, b.meeting_id, b.meeting_url, b.recall_bot_id, b.status, b.error, b.created_at, b.updated_at
+  const bot = await queryOne<BotRow & { user_id: string }>(
+    `SELECT b.id, b.meeting_id, b.meeting_url, b.recall_bot_id, b.status, b.error, b.created_at, b.updated_at,
+            m.user_id
      FROM bots b
      JOIN meetings m ON m.id = b.meeting_id
      WHERE b.id = $1 AND m.user_id = $2`,
@@ -50,14 +52,42 @@ export async function GET(
       const recallStatus = getLatestStatus(recallBot);
       const mappedStatus = mapRecallStatus(recallStatus);
 
-      if (mappedStatus === 'done' && !['processing', 'completed', 'failed'].includes(bot.status)) {
-        // Mark as processing so the UI shows progress while the webhook runs the pipeline
-        await query(
-          `UPDATE bots SET status = 'processing', updated_at = NOW() WHERE id = $1`,
+      if (mappedStatus === 'done') {
+        // ── Polling-fallback auto-trigger ─────────────────────────────────────
+        // Primary trigger is the Recall.ai webhook (Svix). This is the safety net
+        // for environments where the webhook is misconfigured, delayed, or fails
+        // signature verification — guarantees the pipeline runs end-to-end without
+        // any user interaction.
+        //
+        // Atomic CAS: only the first caller to flip the row to 'processing' runs
+        // the pipeline. The webhook path uses the same guard, so even if both
+        // race, exactly one wins.
+        const claimed = await queryOne<{ id: string }>(
+          `UPDATE bots SET status = 'processing', updated_at = NOW()
+           WHERE id = $1 AND status NOT IN ('processing', 'completed', 'failed')
+           RETURNING id`,
           [bot.id]
         );
         bot.status = 'processing';
-        // Pipeline is triggered server-side by the Recall.ai webhook — no after() needed here
+
+        if (claimed) {
+          console.log(`[api/bots] Polling-fallback claimed bot ${bot.id} — running pipeline in background`);
+          after(async () => {
+            try {
+              await handleRecordingReady(bot, recallBot, bot.user_id);
+            } catch (err) {
+              console.error(`[api/bots] Pipeline error for meeting ${bot.meeting_id}:`, err);
+              await query(
+                `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
+                [String(err), bot.id]
+              ).catch(console.error);
+              await query(
+                `UPDATE meetings SET status = 'failed', processing_stage = NULL WHERE id = $1`,
+                [bot.meeting_id]
+              ).catch(console.error);
+            }
+          });
+        }
       } else if (mappedStatus === 'failed') {
         const errorMsg = recallBot.status_changes?.at(-1)?.message ?? 'Bot failed';
         await query(

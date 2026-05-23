@@ -85,17 +85,20 @@ export function DashboardPoller({ recentMeetings }: Props) {
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl animate-fade-up-1"
       style={{
         background: 'rgba(16, 16, 40, 0.95)',
         border: '1px solid rgba(52,211,153,0.35)',
         backdropFilter: 'blur(12px)',
-        maxWidth: '340px',
+        maxWidth: '380px',
       }}
     >
       <div
         className="w-2 h-2 rounded-full flex-shrink-0"
         style={{ background: '#34d399', boxShadow: '0 0 6px #34d399' }}
+        aria-hidden="true"
       />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
@@ -107,17 +110,27 @@ export function DashboardPoller({ recentMeetings }: Props) {
       </div>
       <Link
         href={`/meetings/${toast.id}`}
-        className="text-xs font-semibold whitespace-nowrap hover:opacity-80 transition-opacity"
-        style={{ color: '#f59e0b' }}
+        className="inline-flex items-center justify-center text-xs font-semibold whitespace-nowrap rounded-lg transition-all hover:opacity-90"
+        style={{
+          color: '#0a0a0f',
+          background: '#f59e0b',
+          padding: '10px 14px',
+          minHeight: '44px',
+        }}
         onClick={() => setToast(null)}
       >
-        View →
+        Open transcript
       </Link>
       <button
         onClick={() => setToast(null)}
-        className="ml-1 hover:opacity-60 transition-opacity flex-shrink-0"
-        style={{ color: 'rgba(255,255,255,0.3)' }}
-        aria-label="Dismiss"
+        className="hover:opacity-60 transition-opacity flex-shrink-0 flex items-center justify-center"
+        style={{
+          color: 'rgba(255,255,255,0.4)',
+          width: '32px',
+          height: '32px',
+          marginLeft: '-2px',
+        }}
+        aria-label="Dismiss notification"
       >
         ✕
       </button>
