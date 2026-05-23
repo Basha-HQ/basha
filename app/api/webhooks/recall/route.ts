@@ -88,17 +88,22 @@ export async function POST(req: NextRequest) {
   }
 
   if (eventName === 'bot.done') {
-    // Atomic CAS — only the first request to claim this row runs the pipeline.
-    // Guards against the webhook + polling path racing each other.
+    // Atomic CAS keyed off MEETING status (not bot status). Pipeline flips
+    // meeting.status to 'processing' on first action, so this CAS succeeds
+    // at-most-once across racing webhook + polling requests, AND recovers
+    // stuck rows where bot.status was prematurely flipped by old code.
     const claimed = await queryOne<{ id: string }>(
       `UPDATE bots SET status = 'processing', updated_at = NOW()
-       WHERE id = $1 AND status NOT IN ('processing', 'completed', 'failed')
+       WHERE id = $1
+         AND meeting_id IN (
+           SELECT id FROM meetings WHERE status NOT IN ('processing', 'completed', 'failed')
+         )
        RETURNING id`,
       [bot.id]
     );
 
     if (!claimed) {
-      console.log(`[webhook/recall] Bot ${bot.id} already claimed by another path — skipping`);
+      console.log(`[webhook/recall] Bot ${bot.id} meeting already in processing/terminal state — skipping`);
       return NextResponse.json({ ok: true });
     }
 

@@ -31,9 +31,9 @@ export async function GET(
 
   const { id } = await params;
 
-  const bot = await queryOne<BotRow & { user_id: string }>(
+  const bot = await queryOne<BotRow & { user_id: string; meeting_status: string }>(
     `SELECT b.id, b.meeting_id, b.meeting_url, b.recall_bot_id, b.status, b.error, b.created_at, b.updated_at,
-            m.user_id
+            m.user_id, m.status AS meeting_status
      FROM bots b
      JOIN meetings m ON m.id = b.meeting_id
      WHERE b.id = $1 AND m.user_id = $2`,
@@ -44,9 +44,13 @@ export async function GET(
     return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
   }
 
-  // If bot is still active, sync status from Recall.ai
-  // Exclude 'processing' to prevent double-triggering handleRecordingReady
-  if (bot.recall_bot_id && !['completed', 'failed', 'processing'].includes(bot.status)) {
+  // Sync with Recall.ai unless the meeting itself is in a terminal state.
+  // We deliberately key off meeting.status (not bot.status) — bot.status can
+  // be stuck on 'processing' from a half-completed historical attempt where
+  // the pipeline never actually started. Meeting status is the source of truth
+  // for whether the pipeline has begun.
+  const meetingTerminal = ['completed', 'failed'].includes(bot.meeting_status);
+  if (bot.recall_bot_id && !meetingTerminal) {
     try {
       const recallBot = await getRecallBot(bot.recall_bot_id);
       const recallStatus = getLatestStatus(recallBot);
@@ -59,12 +63,16 @@ export async function GET(
         // signature verification — guarantees the pipeline runs end-to-end without
         // any user interaction.
         //
-        // Atomic CAS: only the first caller to flip the row to 'processing' runs
-        // the pipeline. The webhook path uses the same guard, so even if both
-        // race, exactly one wins.
+        // Atomic CAS keyed off MEETING status. The pipeline flips meeting.status
+        // to 'processing' on first action, so this CAS succeeds at-most-once
+        // even across racing webhook + poll requests, AND it recovers stuck rows
+        // where bot.status was prematurely flipped to 'processing' by old code.
         const claimed = await queryOne<{ id: string }>(
           `UPDATE bots SET status = 'processing', updated_at = NOW()
-           WHERE id = $1 AND status NOT IN ('processing', 'completed', 'failed')
+           WHERE id = $1
+             AND meeting_id IN (
+               SELECT id FROM meetings WHERE status NOT IN ('processing', 'completed', 'failed')
+             )
            RETURNING id`,
           [bot.id]
         );
