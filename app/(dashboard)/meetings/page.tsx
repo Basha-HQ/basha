@@ -1,7 +1,10 @@
 import { auth } from '@/lib/auth/config';
 import { query } from '@/lib/db';
+import { after } from 'next/server';
 import Link from 'next/link';
 import { MeetingFilters } from '@/components/meetings/MeetingFilters';
+import { DashboardPoller } from '@/components/meetings/DashboardPoller';
+import { syncActiveBotsForUser } from '@/lib/bot/syncActiveBots';
 
 interface Meeting {
   id: string;
@@ -27,6 +30,15 @@ export default async function MeetingsPage() {
      ORDER BY created_at DESC`,
     [userId]
   );
+
+  // Background bot sweep — kicks off pipeline for any Recall.ai bot whose
+  // recording finished but never got its webhook delivered. Doesn't depend
+  // on the user opening a specific meeting card.
+  after(() => {
+    syncActiveBotsForUser(userId).catch((err) => {
+      console.error('[meetings] Background bot sweep failed:', err);
+    });
+  });
 
   const completed = meetings.filter((m) => m.status === 'completed').length;
   const processing = meetings.filter((m) => m.status === 'processing').length;
@@ -120,6 +132,10 @@ export default async function MeetingsPage() {
           )}
         </div>
       </div>
+
+      {/* Live status polling — surfaces toast + triggers continuous server
+          sweep of active Recall.ai bots via GET /api/meetings every 10s. */}
+      <DashboardPoller recentMeetings={meetings.map((m) => ({ id: m.id, title: m.title, status: m.status }))} />
     </div>
   );
 }

@@ -194,7 +194,14 @@ export async function handleRecordingReady(
       `UPDATE bots SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
       [msg, bot.id]
     );
-    // meetings.status is already set to 'failed' by the shared pipeline on throw
+    // Pre-pipeline errors (e.g. expired Recall.ai recording URL) need meeting.status
+    // set to 'failed' here — the shared pipeline only updates it when it runs.
+    // Without this, the background sweep would re-fire on this bot forever
+    // because meeting.status would stay 'recording'.
+    await query(
+      `UPDATE meetings SET status = 'failed', processing_stage = NULL WHERE id = $1`,
+      [bot.meeting_id]
+    ).catch(console.error);
 
     // Notify the user by email
     const userRow = await queryOne<{ email: string; name: string; title: string }>(

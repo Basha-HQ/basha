@@ -86,6 +86,33 @@ function detectScriptLang(text: string): string | null {
 const normForCompare = (s: string) =>
   s.toLowerCase().replace(/[.!?,;:…]+$/, '').replace(/\s+/g, ' ').trim();
 
+/**
+ * Tolerant English-equivalence check: returns true when `og` and `en` are
+ * effectively the same English sentence. Built to handle Sarvam's translate
+ * API which "cleans up" English text in tiny ways (e.g. "minutes" → "minute",
+ * removed/added punctuation, normalized contractions) that broke the previous
+ * strict normForCompare equality and caused dual transcripts on English-only
+ * meetings. Falls back to token-overlap (≥80% of words common across both
+ * sentences) so genuine translations (e.g. Tanglish "Namaskara" → "Hey") still
+ * register as different and trigger the EN block.
+ */
+function isEnglishEquivalent(og: string, en: string): boolean {
+  if (!en) return true;
+  if (normForCompare(en) === normForCompare(og)) return true;
+  const tokenize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const ogTokens = tokenize(og);
+  const enTokens = tokenize(en);
+  if (ogTokens.length === 0 || enTokens.length === 0) return true;
+  // Very short utterances (≤2 words) are Sarvam's least reliable area —
+  // it routinely confuses "Okay" → "Bye." and similar. These carry no real
+  // translation value, so suppress dual display when both sides are short.
+  if (ogTokens.length <= 2 && enTokens.length <= 2) return true;
+  const ogSet = new Set(ogTokens);
+  const matched = enTokens.filter((t) => ogSet.has(t)).length;
+  return matched / Math.max(ogTokens.length, enTokens.length) >= 0.8;
+}
+
 function getSpeakerColor(speaker: string, speakerMap: Map<string, number>) {
   if (!speakerMap.has(speaker)) {
     speakerMap.set(speaker, speakerMap.size);
@@ -113,6 +140,26 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>(initialSpeakerLabels ?? {});
   const [audioDuration, setAudioDuration] = useState(knownDuration ?? 0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Pre-compute per-segment English-equivalence using the tolerant token-overlap
+  // check. This drives both the per-segment EN-block display and the meeting-level
+  // language header. Tanglish/Hinglish meetings keep their dual transcripts because
+  // genuine translations (e.g. "Namaskara" → "Hey") fall below the 80% threshold.
+  const segmentIsEnglish = useMemo(
+    () => transcripts.map((t) =>
+      detectScriptLang(t.original_text ?? '') !== null
+        ? false
+        : isEnglishEquivalent(t.original_text ?? '', t.english_text ?? '')
+    ),
+    [transcripts]
+  );
+  const isMeetingPureEnglish = useMemo(() => {
+    if (sourceLanguage && sourceLanguage !== 'en-IN' && sourceLanguage !== 'en'
+      && sourceLanguage !== 'auto' && sourceLanguage !== 'unknown') {
+      return false;
+    }
+    return segmentIsEnglish.every(Boolean);
+  }, [segmentIsEnglish, sourceLanguage]);
 
   const segmentRefs = useRef<Array<HTMLDivElement | null>>([]);
   const seekAudioRef = useRef<((s: number) => void) | null>(null);
@@ -378,15 +425,15 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
         })()}
 
         {/* Language header — shown above segments when non-English content is present */}
-        {(() => {
+        {!isMeetingPureEnglish && (() => {
           const nonEnglishLangs = new Set<string>();
           let hasNonEnglish = false;
 
-          // Iterate ALL segments so every detected script contributes (not just the first)
-          for (const t of transcripts) {
-            const en = t.english_text?.trim() ?? '';
-            const og = t.original_text?.trim() ?? '';
-            if (!en || normForCompare(en) === normForCompare(og)) continue;
+          // Use segmentIsEnglish so the header agrees with the per-segment display:
+          // a segment that's hidden as English-only must not contribute to the header.
+          for (let i = 0; i < transcripts.length; i++) {
+            if (segmentIsEnglish[i]) continue;
+            const og = transcripts[i].original_text?.trim() ?? '';
             hasNonEnglish = true;
             const scriptLang = detectScriptLang(og);
             if (scriptLang) nonEnglishLangs.add(scriptLang);
@@ -469,6 +516,7 @@ export function TranscriptViewer({ meetingId, transcripts, meetingTitle, audioPa
                   isFlagged={flaggedSegmentIds?.includes(seg.id) ?? false}
                   onSeek={audioPath ? () => { seekAudioRef.current?.(displayTs); } : undefined}
                   sourceLanguage={sourceLanguage}
+                  forcePureEnglish={fullIdx >= 0 ? segmentIsEnglish[fullIdx] : false}
                   domRef={(el) => {
                     if (fullIdx >= 0) segmentRefs.current[fullIdx] = el;
                   }}
@@ -516,6 +564,7 @@ function TranscriptRow({
   onSeek,
   domRef,
   sourceLanguage,
+  forcePureEnglish,
 }: {
   segment: TranscriptRow;
   displayTimestamp: number;
@@ -530,6 +579,7 @@ function TranscriptRow({
   onSeek?: () => void;
   domRef?: (el: HTMLDivElement | null) => void;
   sourceLanguage?: string;
+  forcePureEnglish?: boolean;
 }) {
   const resolvedLabel = segment.speaker ? speakerLabel(segment.speaker, speakerLabels) : null;
   const sc = resolvedLabel ? getSpeakerColor(resolvedLabel, speakerMap) : null;
@@ -552,13 +602,13 @@ function TranscriptRow({
   const label = segment.speaker ? speakerLabel(segment.speaker, speakerLabels) : null;
   const initial = segment.speaker ? speakerInitial(segment.speaker, speakerLabels) : null;
 
-  // Pure-English: no non-Latin script detected, and translation matches (or is absent)
-  const enText = segment.english_text?.trim() ?? '';
+  // English-equivalence is decided at the parent level (token-overlap aware) and
+  // passed down via `forcePureEnglish`. Keep the script-based fallback so any
+  // future caller that doesn't pass the prop still gets correct behavior on
+  // non-Latin scripts.
   const ogText = segment.original_text?.trim() ?? '';
   const hasNonLatinScript = detectScriptLang(ogText) !== null;
-  const isPureEnglish = hasNonLatinScript
-    ? false
-    : (!enText || normForCompare(enText) === normForCompare(ogText));
+  const isPureEnglish = forcePureEnglish ?? !hasNonLatinScript;
 
   // Card background: slate wash for English, fixed warm-amber gradient for non-English
   const cardBackground = isPureEnglish

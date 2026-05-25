@@ -1,21 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { auth } from '@/lib/auth/config';
 import { query, queryOne } from '@/lib/db';
+import { syncActiveBotsForUser } from '@/lib/bot/syncActiveBots';
 
-// GET /api/meetings — list all meetings for the logged-in user
+export const maxDuration = 300;
+
+// GET /api/meetings — list all meetings for the logged-in user.
+//
+// Side-effect: kicks off a background sweep of the user's active Recall.ai
+// bots via `after()`. The dashboard's client-side poller hits this endpoint
+// every 10s, so this sweep gives us a continuous server-side trigger for
+// pipeline kickoff that doesn't depend on the user opening a meeting card.
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const userId = session.user.id;
   const meetings = await query(
     `SELECT id, title, meeting_link, platform, status, duration, created_at, completed_at, processing_stage
      FROM meetings
      WHERE user_id = $1
      ORDER BY created_at DESC`,
-    [session.user.id]
+    [userId]
   );
+
+  // Fire-and-forget — never block the response on Recall.ai sync.
+  after(() => {
+    syncActiveBotsForUser(userId).catch((err) => {
+      console.error('[api/meetings] Background bot sweep failed:', err);
+    });
+  });
 
   return NextResponse.json({ meetings });
 }

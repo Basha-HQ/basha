@@ -1,9 +1,11 @@
 import { auth } from '@/lib/auth/config';
 import { query, queryOne } from '@/lib/db';
+import { after } from 'next/server';
 import Link from 'next/link';
 import { MeetingCard } from '@/components/meetings/MeetingCard';
 import { UpcomingMeetings } from '@/components/dashboard/UpcomingMeetings';
 import { DashboardPoller } from '@/components/meetings/DashboardPoller';
+import { syncActiveBotsForUser } from '@/lib/bot/syncActiveBots';
 
 interface Meeting {
   id: string;
@@ -40,6 +42,14 @@ export default async function DashboardPage() {
   const session = await auth();
   const userId = session!.user.id;
   const firstName = session!.user.name?.split(' ')[0] ?? 'there';
+
+  // Sweep active Recall.ai bots so pipeline kickoff doesn't require the user
+  // to open a specific meeting card. Runs after the response is sent.
+  after(() => {
+    syncActiveBotsForUser(userId).catch((err) => {
+      console.error('[dashboard] Background bot sweep failed:', err);
+    });
+  });
 
   const calendarRow = await queryOne<{ google_calendar_connected: boolean; auto_join_mode: string }>(
     `SELECT google_calendar_connected, auto_join_mode FROM users WHERE id = $1`,
